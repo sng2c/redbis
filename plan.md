@@ -1,8 +1,8 @@
-# Redbis Phase 1 — Implementation Plan
+# Redbis Phase 1 — Vitest Test Cases Addition Plan
 
 ## Goal
 
-Implement a TypeScript TCP server on port 6379 with structured logging, multi-client handling, graceful shutdown, and an extensible project structure for future RESP parsing and storage adapter phases.
+Add Vitest test coverage for all 7 Phase 1 modules of the Redbis project, with test descriptions in Korean, integration-style TCP tests for server/connection, and unit tests for config/logger/parser/sqlite.
 
 ---
 
@@ -10,193 +10,309 @@ Implement a TypeScript TCP server on port 6379 with structured logging, multi-cl
 
 ### Key Decisions
 
-1. **TypeScript strict mode** — `tsconfig.json` MUST set `"strict": true`. No `any` types. All function parameters and returns must be typed.
-2. **Node.js native `net` module only** — No Express, Koa, or any TCP framework. Use `import * as net from 'net'`. This is a hard constraint from the project owner.
-3. **Minimal dependencies** — Only dev dependencies allowed: `typescript`, `@types/node`, `ts-node` (for dev), and `concurrently` or `nodemon` for watch mode. No runtime dependencies beyond Node builtins.
-4. **Storage abstraction via `IStorage` interface** — Define `IStorage` in `src/storage/interface.ts` with methods for future get/set/delete/keys operations. This must exist as a contract even though Phase 1 has no implementation. SQLite adapter stub (`src/storage/sqlite.ts`) exports a class that `implements IStorage` but throws "not implemented" on every method.
-5. **Structured logger** — `src/logger/index.ts` must export a Logger class/module that outputs structured JSON-like entries with level, timestamp, context/module name, and message. Not raw `console.log` calls scattered everywhere. The logger should have methods: `info()`, `warn()`, `error()`, `debug()`. Each log line must include: ISO timestamp, level, module/context tag, message, and optional data object.
-6. **Connection handler separation** — Each client connection gets its own handler (`src/server/connection.ts`). The server (`src/server/index.ts`) creates the `net.Server` and delegates new sockets to the connection handler. This separation is critical for testability and future phases.
-7. **Configuration via `src/config/index.ts`** — Port, host, and log level must be configurable. Use environment variables (`REDBIS_PORT`, `REDBIS_HOST`, `REDBIS_LOG_LEVEL`) with sensible defaults (port 6379, host '127.0.0.1', log level 'info'). Config is a typed object, not loose variables.
-8. **Korean comments and README** — This is a Korean-origin open-source project. Code comments should be in Korean. README.md must be written in Korean with project overview. Variable/function names stay in English.
-9. **`npm start` must work** — After `npm install && npm run build`, running `npm start` must launch the TCP server. The start script runs the compiled JS from `dist/`.
-10. **Graceful shutdown** — The server MUST handle `SIGINT` and `SIGTERM`. On signal: stop accepting new connections, close existing connections, then exit cleanly. No process.exit without cleanup.
+1. **Vitest is the test framework** — No other test runner. Install `vitest` as a devDependency and configure `vitest.config.ts`.
+2. **Test descriptions in Korean** — All `describe()`, `it()`, `test()` description strings MUST be written in Korean (e.g., `'환경변수가 없을 때 기본값을 반환한다'`). Code, variable names, and import paths remain in English.
+3. **Integration-style tests for server/connection** — Use Node.js `net` module to create real TCP servers and clients. Do NOT mock `net.Server` or `net.Socket`. Use random/high ports (e.g., port 0 to let OS assign, or ports like 16379) to avoid conflicts with any real services.
+4. **Logger tests capture `process.stdout.write`** — Use `vi.spyOn(process.stdout, 'write')` to intercept JSON output. Parse the captured output as JSON and assert on `level`, `module`, `message`, `data` fields. Always restore the spy in `afterEach`.
+5. **Config tests stub/restore env vars** — Use `vi.stubEnv()` / `vi.unstubAllEnvs()` or manual `process.env` save/restore to test different config scenarios. This is critical because `loadConfig()` reads from `process.env`.
+6. **Relative assertions for `activeConnections`** — The `activeConnections` counter in `connection.ts` is a module-level variable with no reset function, and we CANNOT modify source files. Always assert relative changes (e.g., "count increased by 1 after connect") and verify cleanup (count returns to baseline in `afterEach`). Never assume the absolute starting value is 0.
+7. **tsconfig.json MUST be updated** — Add `"src/__tests__"` to the `exclude` array so `tsc` does not compile test files into `dist/`. This is necessary for `npm run build` to remain clean. While the task says "only modify package.json/vitest.config.ts", the build constraint (`npm run build` must pass) makes this a mandatory change too.
+8. **Use `vitest run` for `npm test`** — The `npm test` script should run `vitest run` (single execution, no watch mode). Add a `test:watch` script separately for development.
+9. **Port 0 strategy for integration tests** — When creating TCP servers in tests, use port 0 to let the OS assign an available port, then read `server.address().port` to get the actual port. This avoids EADDRINUSE and port conflicts entirely.
+10. **Async/await for all server operations** — Server start, connect, close are all async. Always use `await` and proper Promise handling. Never forget to close servers and sockets in `afterEach`.
 
 ### Pitfalls & What to Avoid
 
-1. **Do NOT crash on client disconnect** — When a client disconnects abruptly (e.g., kills the connection), the server must log it and continue serving other clients. Attach `'error'` and `'close'` event handlers to every socket. Unhandled `'error'` on a socket will crash the process.
-2. **Do NOT use `console.log` directly** — All logging goes through the structured Logger. No `console.log`, `console.warn`, etc. outside the logger module itself.
-3. **Do NOT implement RESP parsing** — Phase 1 only logs raw incoming data. Do not attempt to parse RESP commands. The `src/protocol/parser.ts` is a stub with a TODO comment.
-4. **Do NOT implement database operations** — Storage stubs throw "not implemented" errors. No SQLite, no file I/O for data storage.
-5. **Do NOT forget to `git checkout -b feat/tcp-server-and-logger`** — The git repo has no commits yet. The worker must create the initial commit on branch `feat/tcp-server-and-logger`.
-6. **Do NOT hardcode port/host** — Always read from config which reads from environment variables.
-7. **Do NOT ignore TypeScript compilation errors** — The project must compile cleanly with `tsc` under strict mode. Run `npm run build` and verify zero errors before declaring done.
+1. **DO NOT modify any source files in `src/`** — Only add new files. The test files are in `src/__tests__/`. The only existing files you modify are `package.json` and `tsconfig.json` (and you create `vitest.config.ts`).
+2. **Module-level side effects in config** — `import { config } from '../config'` triggers `loadConfig()` once at import time. The `config` singleton cannot be changed by altering env vars after import. For testing `loadConfig()` with different env vars, either: (a) use `vi.stubEnv()` before any `loadConfig()` call, or (b) call `loadConfig()` directly (it re-reads env vars each time).
+3. **Logger uses `process.stdout.write`** — Do NOT use `console.log` spies; the Logger writes to `process.stdout.write` directly. Spy on that method specifically.
+4. **Logger only includes `data` field when non-empty** — The Logger implementation skips the `data` field when `data` is `undefined` or has zero keys (`Object.keys(data).length > 0`). Test both cases: with data and without data.
+5. **`shutdownServer` resolves even on timeout** — `shutdownServer` returns a Promise that resolves (not rejects) even when the force-exit timer fires. Tests should verify this behavior.
+6. **`isLogLevelEnabled` fallback behavior** — When given an unknown log level string, `isLogLevelEnabled` falls back to `'info'` priority (via `LOG_LEVELS[configLevel] ?? LOG_LEVELS.info`). Test this edge case.
+7. **Socket timeout destroys the socket** — The 5-minute (300000ms) timeout in `handleConnection` calls `socket.destroy()`. In integration tests, do NOT test the actual 5-minute timeout (too slow). Instead, test that `socket.setTimeout` is called with `300000` by spying on the method, or use a mock socket.
+8. **Test isolation for `activeConnections`** — Each test file imports the same `connection` module, so `activeConnections` is shared. Use `beforeEach`/`afterEach` to ensure connections are fully cleaned up so the count returns to the starting baseline.
+9. **EADDRINUSE testing** — When testing EADDRINUSE in server tests, start a server on a specific port first, then try to start another server on the same port. Clean up both servers afterward. Use unique high ports to avoid conflicts with system services.
+10. **`SqliteStorage` methods are async** — All methods return promises that reject (throw). Use `await expect(method()).rejects.toThrow(...)` pattern in tests, not `.toThrow()` on the call directly.
 
 ### Constraints
 
-- **Language**: TypeScript (strict mode)
-- **Runtime**: Node.js (use `net` module — no C++ addons, no native modules)
-- **No runtime dependencies**: Only dev dependencies in package.json
-- **Entry point**: `src/index.ts` → compiles to `dist/index.js`
-- **Port**: default 6379, configurable via `REDBIS_PORT` env var
-- **Host**: default 127.0.0.1, configurable via `REDBIS_HOST` env var
-- **Output directory**: `dist/` (compile target in tsconfig.json)
-- **Node.js target**: ES2020 or later (for async generators, optional chaining, etc.)
-- **Module system**: CommonJS for compatibility (`"module": "commonjs"` in tsconfig)
+- **Language**: TypeScript
+- **Test framework**: Vitest
+- **Test directory**: `src/__tests__/`
+- **Test file naming**: `<module>.test.ts` (e.g., `config.test.ts`, `logger.test.ts`)
+- **All test descriptions in Korean**
+- **Existing source files in `src/` MUST NOT be modified**
+- **`npm run build` MUST still pass** after changes
+- **`npm test` MUST work** after `npm install`
+- **No additional runtime dependencies** — vitest is a devDependency only
 
 ### Scope Boundary
 
 **IN scope:**
-- package.json with scripts (build, start, dev)
-- tsconfig.json with strict mode
-- .gitignore for Node.js/TypeScript
-- README.md in Korean with project overview
-- TCP server listening on configurable port
-- Structured logger module
-- Connection handler per client socket
-- Multi-client async handling
-- Graceful shutdown on SIGINT/SIGTERM
-- Config module (env vars with defaults)
-- IStorage interface definition
-- SQLite adapter stub (implements IStorage, throws "not implemented")
-- RESP parser stub (empty or TODO)
-- Initial git commit on branch `feat/tcp-server-and-logger`
-- Logging incoming raw data from redis-cli connections
+- Vitest configuration (`vitest.config.ts`)
+- `package.json` update (vitest devDependency, test scripts)
+- `tsconfig.json` update (exclude test directory from build)
+- `src/__tests__/config.test.ts` — unit tests for config module
+- `src/__tests__/logger.test.ts` — unit tests for logger module
+- `src/__tests__/parser.test.ts` — unit tests for RESP parser stub
+- `src/__tests__/sqlite.test.ts` — unit tests for SQLite storage stub
+- `src/__tests__/server.test.ts` — integration tests for TCP server
+- `src/__tests__/connection.test.ts` — integration tests for connection handler
+- Running `npm install` and `npm test` to verify
 
 **OUT of scope:**
-- RESP protocol parsing (Phase 2)
-- Actual database read/write (Phase 2)
-- Redis command handling (Phase 2+)
-- Authentication (future)
-- Docker/deployment configs
-- Performance benchmarking
-- Unit tests (can be Phase 1.5 or Phase 2 — not required now)
-- Any npm runtime dependencies
+- Modifying any existing source files in `src/`
+- E2E tests
+- Coverage report configuration
+- CI/CD configuration
+- Adding new source features
 
 ---
 
 ## Tasks
 
-### Task 1: Create package.json
+### Task 1: Install vitest and update package.json
+
 - **File**: `/root/redbis/package.json`
-- **Action**: Create with name "redbis", version "0.1.0", description in Korean, scripts: `build` (tsc), `start` (node dist/index.js), `dev` (ts-node src/index.ts or nodemon equivalent). Dev dependencies: typescript, @types/node. Main: "dist/index.js". Types: "dist/index.d.ts" (optional for Phase 1).
-- **Acceptance**: `npm install` succeeds. `npm run build` calls tsc.
+- **Action**: 
+  - Add `"vitest": "^2.1.0"` to `devDependencies`
+  - Add `"test": "vitest run"` to `scripts`
+  - Add `"test:watch": "vitest"` to `scripts`
+- **Verification**: `cat package.json` shows vitest in devDependencies and both test scripts
 
-### Task 2: Create tsconfig.json
+### Task 2: Create vitest.config.ts
+
+- **File**: `/root/redbis/vitest.config.ts`
+- **Action**: Create with:
+  ```typescript
+  import { defineConfig } from 'vitest/config';
+
+  export default defineConfig({
+    test: {
+      globals: true,
+      environment: 'node',
+      include: ['src/__tests__/**/*.test.ts'],
+      testTimeout: 10000,
+    },
+  });
+  ```
+- **Rationale**: `globals: true` allows `describe`/`it`/`expect` without imports. `environment: 'node'` is appropriate for a Node.js TCP server project. `testTimeout: 10000` gives integration tests (TCP connect/close) enough time.
+
+### Task 3: Update tsconfig.json to exclude test directory
+
 - **File**: `/root/redbis/tsconfig.json`
-- **Action**: strict: true, target: ES2020, module: commonjs, outDir: ./dist, rootDir: ./src, include: [src], exclude: [node_modules, dist]. sourceMap: true, declaration: true.
-- **Acceptance**: `npx tsc --noEmit` passes. `npm run build` produces dist/ output.
+- **Action**: Change `"exclude": ["node_modules", "dist"]` to `"exclude": ["node_modules", "dist", "src/__tests__"]`
+- **Rationale**: Test files import from `vitest` and should not be compiled by `tsc` into `dist/`. This ensures `npm run build` still passes cleanly.
 
-### Task 3: Create .gitignore
-- **File**: `/root/redbis/.gitignore`
-- **Action**: Add node_modules/, dist/, *.js.map, .env, .DS_Store, coverage/.
-- **Acceptance**: `git status` does not show node_modules or dist.
+### Task 4: Run npm install
 
-### Task 4: Create src/config/index.ts
-- **File**: `/root/redbis/src/config/index.ts`
-- **Action**: Export a typed `Config` interface and a `loadConfig()` function. Read REDBIS_PORT (default 6379), REDBIS_HOST (default '127.0.0.1'), REDBIS_LOG_LEVEL (default 'info'). Validate port is a number. Export singleton config object.
-- **Acceptance**: Config values are typed. Env vars override defaults. Can import and use in server.
+- **Action**: Run `cd /root/redbis && npm install`
+- **Verification**: `node_modules/.bin/vitest --version` prints a version number
 
-### Task 5: Create src/logger/index.ts
-- **File**: `/root/redbis/src/logger/index.ts`
-- **Action**: Create `Logger` class with constructor taking module: string. Methods: info(msg, data?), warn(msg, data?), error(msg, data?), debug(msg, data?). Each method outputs a structured JSON line: `{ timestamp, level, module, message, data? }`. Respect log level from config (debug < info < warn < error). Export a factory function `createLogger(module: string): Logger`.
-- **Acceptance**: Can call `createLogger('server').info('listening', { port: 6379 })` and get structured JSON output to stdout.
+### Task 5: Create src/__tests__/config.test.ts
 
-### Task 6: Create src/storage/interface.ts
-- **File**: `/root/redbis/src/storage/interface.ts`
-- **Action**: Define `IStorage` interface with methods: `get(key: string): Promise<string | null>`, `set(key: string, value: string): Promise<void>`, `delete(key: string): Promise<boolean>`, `keys(pattern: string): Promise<string[]>`, `flush(): Promise<void>`. Also define `StorageConfig` interface. Export both.
-- **Acceptance**: Other modules can `import { IStorage } from './interface'`.
+- **File**: `/root/redbis/src/__tests__/config.test.ts`
+- **Action**: Create with the following test cases:
+  
+  **describe('loadConfig')**:
+  1. `it('환경변수가 없을 때 기본값을 반환한다')` — Call `loadConfig()` with no env vars set, verify `{ port: 6379, host: '127.0.0.1', logLevel: 'info' }`
+  2. `it('REDBIS_PORT 환경변수로 포트를 설정할 수 있다')` — Set `REDBIS_PORT=6380`, call `loadConfig()`, verify `port: 6380`
+  3. `it('REDBIS_HOST 환경변수로 호스트를 설정할 수 있다')` — Set `REDBIS_HOST=0.0.0.0`, call `loadConfig()`, verify `host: '0.0.0.0'`
+  4. `it('REDBIS_LOG_LEVEL 환경변수로 로그 레벨을 설정할 수 있다')` — Set `REDBIS_LOG_LEVEL=debug`, call `loadConfig()`, verify `logLevel: 'debug'`
+  5. `it('REDBIS_LOG_LEVEL이 대문자여도 소문자로 정규화된다')` — Set `REDBIS_LOG_LEVEL=DEBUG`, call `loadConfig()`, verify `logLevel: 'debug'`
+  6. `it('유효하지 않은 포트 번호일 때 에러를 발생시킨다')` — Test NaN (`REDBIS_PORT=abc`), too low (`REDBIS_PORT=0`), too high (`REDBIS_PORT=70000`), negative (`REDBIS_PORT=-1`). Expect `throw new Error(...)` with Korean message containing '유효하지 않은 포트 번호'
+  7. `it('유효하지 않은 로그 레벨일 때 에러를 발생시킨다')` — Set `REDBIS_LOG_LEVEL=invalid`, verify throws with Korean message containing '유효하지 않은 로그 레벨'
+  8. `it('경계값 포트 번호가 허용된다')` — Test port 1 and port 65535
+  
+  **Implementation notes**:
+  - Use `vi.stubEnv()` and `vi.unstubAllEnvs()` for env var manipulation
+  - For throw tests, wrap `loadConfig()` call and assert with `expect(fn).toThrow()`
+  - Reset env vars in `afterEach` via `vi.unstubAllEnvs()`
 
-### Task 7: Create src/storage/sqlite.ts (stub)
-- **File**: `/root/redbis/src/storage/sqlite.ts`
-- **Action**: Create `SqliteStorage` class implementing `IStorage`. Each method throws `new Error('Not implemented: SqliteStorage.<method>')`. Add Korean comment explaining this will be implemented in Phase 2.
-- **Acceptance**: Compiles. Methods throw on call.
+  **describe('isLogLevelEnabled')**:
+  9. `it('config 레벨보다 높은 우선순위 메시지 레벨은 활성화된다')` — `isLogLevelEnabled('info', 'error')` → true
+  10. `it('config 레벨과 같은 우선순위 메시지 레벨은 활성화된다')` — `isLogLevelEnabled('info', 'info')` → true
+  11. `it('config 레벨보다 낮은 우선순위 메시지 레벨은 비활성화된다')` — `isLogLevelEnabled('info', 'debug')` → false
+  12. `it('알 수 없는 로그 레벨은 info 우선순위로 처리된다')` — `isLogLevelEnabled('info', 'unknown')` → true (falls back to info priority)
 
-### Task 8: Create src/protocol/parser.ts (stub)
-- **File**: `/root/redbis/src/protocol/parser.ts`
-- **Action**: Create `RespParser` class with a `feed(data: Buffer): void` method and a TODO comment that full RESP parsing is Phase 2. Also add a `parse()` placeholder that returns null. Add Korean comment.
-- **Acceptance**: Compiles. Exportable but non-functional (by design).
+### Task 6: Create src/__tests__/logger.test.ts
 
-### Task 9: Create src/server/connection.ts
-- **File**: `/root/redbis/src/server/connection.ts`
-- **Action**: Export `handleConnection(socket: net.Socket): void` function. Log new connection with remote address/port. Attach `'data'` handler that logs raw bytes (hex or string representation) via structured logger. Attach `'error'` handler that logs error but does NOT throw. Attach `'close'` handler that logs disconnection. Track connection count (export a getter for stats if desired). Use `createLogger('connection')`.
-- **Acceptance**: Connecting with redis-cli or telnet shows structured connection/disconnection logs. Killing the client does NOT crash the server.
+- **File**: `/root/redbis/src/__tests__/logger.test.ts`
+- **Action**: Create with the following test cases:
 
-### Task 10: Create src/server/index.ts
-- **File**: `/root/redbis/src/server/index.ts`
-- **Action**: Export `createServer(config: Config): net.Server` function. Create `net.Server`, attach `'connection'` event calling `handleConnection`. Return the server. Also export `startServer(config: Config): Promise<void>` that creates, listens, and resolves when server is listening. Export `shutdownServer(server: net.Server): Promise<void>` for graceful shutdown.
-- **Acceptance**: Server listens on configured port. Multiple clients can connect simultaneously.
+  **Setup**: Spy on `process.stdout.write` in `beforeEach`, restore in `afterEach`. Clear call history between tests.
 
-### Task 11: Create src/index.ts (entry point)
-- **File**: `/root/redbis/src/index.ts`
-- **Action**: Import config, logger, server. On start: loadConfig, createServer, startServer, log "Redbis server started on host:port". On SIGINT/SIGTERM: log shutdown signal, call shutdownServer, then process.exit(0). Set a timeout force-exit after 5s if graceful shutdown hangs.
-- **Acceptance**: `npm start` launches server. Ctrl+C cleanly shuts down. Server appears on port 6379.
+  **describe('Logger')**:
+  1. `it('createLogger가 Logger 인스턴스를 반환한다')` — `createLogger('test')` returns instance of `Logger`
+  
+  **describe('Logger.log methods')**:
+  2. `it('info 메서드가 올바른 JSON 형식으로 출력한다')` — Call `logger.info('테스트 메시지')`, capture output, parse as JSON, verify `level: 'info'`, `module: 'test'`, `message: '테스트 메시지'`, and `timestamp` is a valid ISO string
+  3. `it('warn 메서드가 올바른 JSON 형식으로 출력한다')` — Same for `warn`
+  4. `it('error 메서드가 올바른 JSON 형식으로 출력한다')` — Same for `error`
+  5. `it('debug 메서드가 올바른 JSON 형식으로 출력한다')` — Same for `debug`. Note: debug may be filtered if default logLevel is 'info'. Set `REDBIS_LOG_LEVEL=debug` via `vi.stubEnv` before importing/requiring, OR mock `isLogLevelEnabled` to return true for debug.
+  6. `it('data 객체가 포함될 때 data 필드가 출력된다')` — Call `logger.info('메시지', { key: 'value' })`, verify parsed JSON has `data: { key: 'value' }`
+  7. `it('data가 빈 객체일 때 data 필드가 생략된다')` — Call `logger.info('메시지', {})`, verify parsed JSON does NOT have `data` key
+  8. `it('data가 undefined일 때 data 필드가 생략된다')` — Call `logger.info('메시지')`, verify parsed JSON does NOT have `data` key
+  9. `it('출력이 줄바꿈으로 끝난다')` — Verify captured string ends with `\n`
 
-### Task 12: Create README.md
-- **File**: `/root/redbis/README.md`
-- **Action**: Write in Korean. Include: 프로젝트 이름 (Redbis), 프로젝트 개요 (Redis 프로토콜 인터페이스를 제공하는 RDBMS 백엔드 미들웨어 프록시), Phase 1 기능 (TCP 서버, 구조화 로거, 다중 클라이언트, 우아한 종료), 설치/실행 방법 (npm install, npm run build, npm start), 환경변수 (REDBIS_PORT, REDBIS_HOST, REDBIS_LOG_LEVEL), 프로젝트 구조 (디렉토리 트리), 향후 계획 (Phase 2: RESP 파싱, Phase 3: SQLite 스토리지 연동).
-- **Acceptance**: README contains all required sections in Korean. Project structure tree matches actual files.
+  **describe('로그 레벨 필터링')**:
+  10. `it('현재 로그 레벨보다 낮은 우선순위 메시지는 출력되지 않는다')` — With default 'info' level, `logger.debug('숨겨짐')` should not call `process.stdout.write`
 
-### Task 13: Install dependencies and build
-- **Action**: Run `npm install` then `npm run build`. Fix any TypeScript compilation errors. Verify dist/ directory contains compiled JS.
-- **Acceptance**: Zero compilation errors. `dist/index.js` exists.
+  **Implementation notes for debug level test**:
+  - Since the logger module imports `config` (singleton) at module load time, and `config.logLevel` is determined before tests run, the simplest approach for the debug test is to use `vi.mock('../config', ...)` to control what `config.logLevel` and `isLogLevelEnabled` return. Alternatively, import the `Logger` class directly and test its `debug` method with a mocked config.
+  - **Recommended approach**: Use `vi.mock('../config')` to mock `isLogLevelEnabled` to return `true` for all levels. Then test that `debug` outputs correctly when the level is enabled.
 
-### Task 14: Smoke test
-- **Action**: Run `npm start` in background. Connect with `redis-cli` or `telnet 127.0.0.1 6379`. Verify server logs connection and data. Verify typing `PING` logs incoming bytes. Kill client connection. Verify server does not crash. Send SIGINT to server. Verify clean exit.
-- **Acceptance**: Server runs, accepts connections, logs data, handles disconnect, shuts down cleanly.
+### Task 7: Create src/__tests__/parser.test.ts
 
-### Task 15: Git commit
-- **Action**: `git checkout -b feat/tcp-server-and-logger`, `git add -A`, `git commit -m "feat: Phase 1 - TCP server, structured logger, extensible project structure"`.
-- **Acceptance**: All files committed on correct branch. `git log` shows the commit.
+- **File**: `/root/redbis/src/__tests__/parser.test.ts`
+- **Action**: Create with the following test cases:
+
+  **describe('RespParser')**:
+  1. `it('RespParser 인스턴스를 생성할 수 있다')` — `new RespParser()` does not throw
+  2. `it('feed 메서드가 예외 없이 호출된다')` — Call `parser.feed(Buffer.from('*1\r\n$4\r\nPING\r\n'))`, verify no exception
+  3. `it('parse 메서드가 null을 반환한다')` — `parser.parse()` returns `null`
+  4. `it('feed 호출 후에도 parse는 null을 반환한다')` — Feed some data, then verify `parse()` still returns null (stub behavior)
+  5. `it('빈 버퍼로 feed를 호출해도 예외가 발생하지 않는다')` — `parser.feed(Buffer.alloc(0))` does not throw
+
+### Task 8: Create src/__tests__/sqlite.test.ts
+
+- **File**: `/root/redbis/src/__tests__/sqlite.test.ts`
+- **Action**: Create with the following test cases:
+
+  **describe('SqliteStorage')**:
+  1. `it('SqliteStorage 인스턴스를 생성할 수 있다')` — `new SqliteStorage()` does not throw
+  2. `it('get 메서드가 구현되지 않음 에러를 발생시킨다')` — `await expect(storage.get('key')).rejects.toThrow('Not implemented: SqliteStorage.get')`
+  3. `it('set 메서드가 구현되지 않음 에러를 발생시킨다')` — `await expect(storage.set('key', 'value')).rejects.toThrow('Not implemented: SqliteStorage.set')`
+  4. `it('delete 메서드가 구현되지 않음 에러를 발생시킨다')` — `await expect(storage.delete('key')).rejects.toThrow('Not implemented: SqliteStorage.delete')`
+  5. `it('keys 메서드가 구현되지 않음 에러를 발생시킨다')` — `await expect(storage.keys('*')).rejects.toThrow('Not implemented: SqliteStorage.keys')`
+  6. `it('flush 메서드가 구현되지 않음 에러를 발생시킨다')` — `await expect(storage.flush()).rejects.toThrow('Not implemented: SqliteStorage.flush')`
+
+  **Implementation note**: All methods are async and throw. Must use `await expect(...).rejects.toThrow(...)` pattern.
+
+### Task 9: Create src/__tests__/connection.test.ts
+
+- **File**: `/root/redbis/src/__tests__/connection.test.ts`
+- **Action**: Create with the following test cases:
+
+  This is an integration test file. Uses real `net.Server` and `net.Socket` objects.
+
+  **Setup** (`beforeEach`):
+  - Create a TCP server via `net.createServer((socket) => handleConnection(socket))`
+  - Start listening on port 0 (OS-assigned port), record the actual port
+  - Record `getActiveConnectionCount()` as `baseCount`
+
+  **Teardown** (`afterEach`):
+  - Close all connected client sockets
+  - Close the server
+  - Wait for server close to complete
+  - Verify `getActiveConnectionCount() === baseCount`
+
+  **describe('handleConnection')**:
+  1. `it('클라이언트가 연결되면 활성 연결 수가 증가한다')` — Connect a client, verify `getActiveConnectionCount() === baseCount + 1`
+  2. `it('클라이언트가 연결을 종료하면 활성 연결 수가 감소한다')` — Connect then disconnect a client, verify count returns to `baseCount`
+  3. `it('여러 클라이언트가 동시에 연결될 수 있다')` — Connect 3 clients, verify count is `baseCount + 3`
+  4. `it('클라이언트 연결 해제 시 hadError 정보와 함께 로깅된다')` — This is hard to test directly without mocking logger. Skip or note as limitation.
+
+  **describe('getActiveConnectionCount')**:
+  5. `it('초기 활성 연결 수를 반환한다')` — Verify `baseCount` is a number ≥ 0
+
+  **Implementation notes**:
+  - Use `net.createConnection({ port: actualPort, host: '127.0.0.1' })` to create clients
+  - Wrap socket events in Promises for async test flow
+  - Timeout: add `testTimeout: 10000` in vitest config for this file
+
+### Task 10: Create src/__tests__/server.test.ts
+
+- **File**: `/root/redbis/src/__tests__/server.test.ts`
+- **Action**: Create with the following test cases:
+
+  **describe('createServer')**:
+  1. `it('net.Server 인스턴스를 생성한다')` — `createServer({ port: 6379, host: '127.0.0.1', logLevel: 'info' })` returns a `net.Server` instance
+
+  **describe('startServer')**:
+  2. `it('서버가 지정된 포트에서 수신 대기한다')` — Call `startServer` with a config using port 0, verify server is listening
+  3. `it('서버가 수신 대기 시작 시 Promise를 해결한다')` — Verify `startServer` returns a Promise that resolves with the server instance
+
+  **Setup for startServer tests** (`beforeEach`):
+  - None needed (each test creates its own server)
+
+  **Teardown** (`afterEach`):
+  - Close the server from each test
+
+  **describe('EADDRINUSE')**:
+  4. `it('이미 사용 중인 포트에서 EADDRINUSE 에러가 발생한다')` — Start server A on port X, then try to start server B on same port. The second `startServer` should reject with an error. Clean up both servers.
+
+  **describe('shutdownServer')**:
+  5. `it('서버를 정상적으로 종료한다')` — Start a server, then call `shutdownServer(server)`. Verify Promise resolves.
+  6. `it('연결된 클라이언트가 없을 때 즉시 종료된다')` — Start server, immediately shutdown, verify resolves quickly
+  7. `it('타임아웃이 지나면 강제 종료한다')` — Start a server, connect a client that never closes, call `shutdownServer(server, 500)`. Verify the Promise resolves within ~1 second even though the client hasn't disconnected. Then close the client.
+  
+  **Implementation notes for EADDRINUSE test**:
+  - First start a server on a specific port (not 0), then attempt to start another on the same port
+  - Use a random high port number (e.g., 16379) or better: start first server on port 0, get the assigned port, then try second server on that exact port
+  - Clean up: close both servers regardless of test outcome (use try/finally)
+
+  **Implementation notes for timeout test**:
+  - Use a very short timeout (e.g., 500ms) to avoid slow tests
+  - Use `vi.useFakeTimers()` if needed, but real timers with short timeout (500ms) are simpler and more reliable for integration tests
+
+### Task 11: Verify npm run build passes
+
+- **Action**: Run `cd /root/redbis && npm run build`
+- **Verification**: Build completes with zero errors. No test files in `dist/` directory.
+- **If build fails**: Debug TypeScript errors. Most likely cause would be vitest types not resolving — ensure `vitest` is installed and tsconfig excludes `src/__tests__`.
+
+### Task 12: Verify npm test passes
+
+- **Action**: Run `cd /root/redbis && npm test`
+- **Verification**: All tests pass. Output shows test results for all 6 test files.
+- **If tests fail**: Read error messages, fix test code (not source code), and re-run.
 
 ---
 
 ## Files to Modify
 
-(N/A — all files are new)
+| File | Changes |
+|------|---------|
+| `/root/redbis/package.json` | Add `vitest` to `devDependencies` (version `^2.1.0` or latest). Add `"test": "vitest run"` and `"test:watch": "vitest"` to `scripts`. |
+| `/root/redbis/tsconfig.json` | Add `"src/__tests__"` to the `exclude` array so test files are not compiled by `tsc`. |
 
 ## New Files
 
 | File | Purpose |
 |------|---------|
-| `/root/redbis/package.json` | Project manifest, scripts, dev dependencies |
-| `/root/redbis/tsconfig.json` | TypeScript config (strict, ES2020, CommonJS) |
-| `/root/redbis/.gitignore` | Ignore node_modules, dist, etc. |
-| `/root/redbis/README.md` | Korean project overview and usage guide |
-| `/root/redbis/src/index.ts` | Entry point — boot server, handle signals |
-| `/root/redbis/src/config/index.ts` | Configuration loader (env vars + defaults) |
-| `/root/redbis/src/logger/index.ts` | Structured JSON logger with module tagging |
-| `/root/redbis/src/server/connection.ts` | Per-connection handler (data logging, error/cleanup) |
-| `/root/redbis/src/server/index.ts` | TCP server creation, start, graceful shutdown |
-| `/root/redbis/src/protocol/parser.ts` | RESP parser stub (Phase 2 TODO) |
-| `/root/redbis/src/storage/interface.ts` | IStorage interface definition |
-| `/root/redbis/src/storage/sqlite.ts` | SQLite adapter stub (throws not implemented) |
+| `/root/redbis/vitest.config.ts` | Vitest configuration (globals, node environment, include pattern, timeout) |
+| `/root/redbis/src/__tests__/config.test.ts` | Unit tests for config module: loadConfig defaults, env var overrides, port validation, log level validation, isLogLevelEnabled |
+| `/root/redbis/src/__tests__/logger.test.ts` | Unit tests for logger module: createLogger factory, JSON output format, each log method, data field inclusion, log level filtering |
+| `/root/redbis/src/__tests__/parser.test.ts` | Unit tests for RESP parser stub: instantiation, feed (no-op), parse returns null |
+| `/root/redbis/src/__tests__/sqlite.test.ts` | Unit tests for SQLite storage stub: instantiation, all methods throw NotImplementedError |
+| `/root/redbis/src/__tests__/connection.test.ts` | Integration tests for connection handler: active connection count tracking, multi-client support, disconnection handling |
+| `/root/redbis/src/__tests__/server.test.ts` | Integration tests for TCP server: createServer, startServer, shutdownServer, EADDRINUSE handling |
 
 ## Dependencies
 
 ```
-Task 4 (config) ← Task 5 (logger needs config for log level)
-Task 4, 5 ← Task 9 (connection handler uses config + logger)
-Task 4, 5 ← Task 10 (server uses config + logger)
-Task 6 ← Task 7 (SQLite stub implements IStorage)
-Task 9, 10 ← Task 11 (entry point orchestrates server)
-Tasks 1-11 ← Task 12 (README references all created files)
-Task 1, 2 ← Task 13 (need package.json + tsconfig before npm install/build)
-Task 13 ← Task 14 (smoke test requires built project)
-Task 14 ← Task 15 (commit after verified working)
+Task 1 (package.json) → Task 4 (npm install)
+Task 1 + Task 2 (vitest.config) → Task 4 (npm install)
+Task 4 (install) → Tasks 5-10 (tests can run)
+Task 3 (tsconfig) → Task 11 (build verification)
+Tasks 5-10 (all tests) + Task 11 (build) → Task 12 (full verification)
 ```
 
-**Recommended execution order**: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15
+**Recommended execution order**: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12
 
 ## Risks
 
-1. **redis-cli sends RESP-formatted data** — redis-cli connects but sends RESP protocol data (e.g., `*1\r\n$4\r\nPING\r\n`). The connection handler should log this raw data cleanly. Use `data.toString('utf8')` or hex dump for visibility. This is expected behavior — we're logging it, not parsing it.
+1. **`activeConnections` module state leak across test files** — Since `connection.ts` uses a module-level `let activeConnections = 0`, and there's no reset function, the counter could accumulate if a test doesn't clean up properly. **Mitigation**: Always use relative assertions (compare before/after). Always close all connections in `afterEach`. Verify count returns to baseline.
 
-2. **redis-cli may disconnect if no RESP response** — redis-cli expects a RESP reply. Since we don't send responses in Phase 1, redis-cli may timeout or show an error. This is acceptable. Document this in README. The server must NOT crash from this.
+2. **Logger singleton config at import time** — The `config` singleton is computed once when `../config` is first imported. If `config.logLevel` is 'info' (default), `logger.debug()` calls will be silently filtered. **Mitigation**: Use `vi.mock('../config')` in logger tests to control `isLogLevelEnabled` return values. Alternatively, for the debug-when-enabled test, stub `REDBIS_LOG_LEVEL=debug` before the module is imported (this is fragile — prefer mocking).
 
-3. **TypeScript strict mode may catch unexpected errors** — Ensure all variables are typed, no implicit any, strict null checks. The `net.Socket` event handlers need proper typing.
+3. **EADDRINUSE test flakiness** — Trying to bind two servers to the same port may fail if the port is already in use by another process. **Mitigation**: Use port 0 for the first server, get the assigned port from `server.address()`, then try to bind the second server to that exact port. Close both servers in `afterEach`.
 
-4. **Port 6379 may already be in use** — If Redis is installed on the system, port 6379 might be occupied. The server should log a clear error and exit if the port is unavailable. Check `server.on('error')` for `EADDRINUSE`.
+4. **`process.stdout.write` spy interactions with Vitest** — Vitest uses `process.stdout.write` for its own output. Spying on it could interfere with test runner output. **Mitigation**: Use `vi.spyOn(process.stdout, 'write').mockImplementation(() => true)` to intercept and silence output during the specific test, then `restore()` in `afterEach`. This prevents logger output from mixing with test output.
 
-5. **Graceful shutdown timeout** — If connections don't close within a reasonable time (5 seconds), force exit. Implement this to avoid hanging processes.
+5. **TypeScript compilation of test files** — If `tsconfig.json` is not updated to exclude `src/__tests__`, `tsc` will try to compile test files and may fail or include them in `dist/`. **Mitigation**: Ensure Task 3 (tsconfig update) is done before Task 11 (build verification).
 
-6. **Git repo has no initial commit** — The .git directory exists but has no commits and no branch. Worker must create the branch and initial commit as the final step.
+6. **Socket timeout test would take 5 minutes** — Never test the actual 300000ms timeout in real time. **Mitigation**: Do not test the timeout duration directly. If needed, spy on `socket.setTimeout` to verify it was called with `300000`.
+
+7. **Race conditions in TCP integration tests** — Server close, socket close, and connection events are all asynchronous. **Mitigation**: Always `await` server close, use `Promise` wrappers for socket events, and use `testTimeout: 10000` in vitest config to avoid premature timeouts.
