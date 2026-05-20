@@ -1,21 +1,33 @@
 {
   "name": "redbis",
   "version": "0.1.0",
-  "description": "Redis 프로토콜 인터페이스를 제공하는 RDBMS 백엔드 미들웨어 프록시",
+  "description": "RDBMS backend middleware proxy that provides a Redis protocol (RESP) interface",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "redbis": "./bin/redbis.js"
+  },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "npm run build"
   },
   "keywords": [
     "redis",
+    "resp",
     "proxy",
     "middleware",
-    "tcp-server"
+    "tcp-server",
+    "rdbms",
+    "sqlite",
+    "database",
+    "protocol"
   ],
   "author": "",
   "license": "MIT",
