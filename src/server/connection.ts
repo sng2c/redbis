@@ -1,60 +1,52 @@
-// 클라이언트 연결 핸들러 모듈
-// 각 클라이언트 소켓 연결에 대해 데이터 수신, 에러 처리, 연결 종료를 관리합니다.
-// 클라이언트 연결 해제 시에도 서버가 계속 동작하도록 안전하게 처리합니다.
-
 import * as net from 'net';
+import { InMemoryStorage } from '../storage/memory';
+import { CommandHandler } from '../command/handler';
+import { RespParser } from '../protocol/parser';
 import { createLogger } from '../logger';
 
 const logger = createLogger('connection');
-
-// 현재 활성 연결 수를 추적하는 카운터
-let activeConnections = 0;
+const storage = new InMemoryStorage();
+const activeSockets = new Set<net.Socket>();
 
 export function getActiveConnectionCount(): number {
-  return activeConnections;
+  return activeSockets.size;
 }
 
 export function handleConnection(socket: net.Socket): void {
+  activeSockets.add(socket);
   const remoteAddress = socket.remoteAddress ?? 'unknown';
   const remotePort = socket.remotePort ?? 0;
   const clientId = `${remoteAddress}:${remotePort}`;
 
-  activeConnections++;
-  logger.info('새 클라이언트 연결', {
-    clientId,
-    activeConnections,
-  });
+  logger.info('Client connected', { clientId, activeConnections: activeSockets.size });
 
-  // 소켓 에러 핸들러 - 프로세스가 죽지 않도록 반드시 처리해야 함
-  socket.on('error', (err: Error) => {
-    logger.error('소켓 에러 발생', {
-      clientId,
-      error: err.message,
-    });
-  });
+  const handler = new CommandHandler(storage);
+  const parser = new RespParser();
 
-  // 데이터 수신 핸들러 - 수신된 원시 데이터를 로그에 기록
-  socket.on('data', (data: Buffer) => {
-    logger.debug('수신 데이터', {
-      clientId,
-      bytes: data.length,
-      data: data.toString('utf8'),
-    });
-  });
-
-  // 연결 종료 핸들러
-  socket.on('close', (hadError: boolean) => {
-    activeConnections--;
-    logger.info('클라이언트 연결 종료', {
-      clientId,
-      hadError,
-      activeConnections,
-    });
-  });
-
-  // 소켓 타임아웃 설정 (유휴 연결 관리)
-  socket.setTimeout(300000, () => {
-    logger.warn('소켓 타임아웃 발생', { clientId });
+  socket.setTimeout(300000);
+  socket.on('timeout', () => {
+    logger.warn('Socket timeout', { clientId });
     socket.destroy();
+  });
+
+  socket.on('data', (data: Buffer) => {
+    parser.feed(data);
+    let parsed: string[] | null;
+    while ((parsed = parser.parse()) !== null) {
+      handler.execute(parsed).then((response: string) => {
+        socket.write(response);
+      }).catch((err: Error) => {
+        logger.error('Command execution error', { clientId, error: err.message });
+      });
+    }
+  });
+
+  socket.on('close', () => {
+    activeSockets.delete(socket);
+    logger.info('Client disconnected', { clientId, activeConnections: activeSockets.size });
+  });
+
+  socket.on('error', (err: Error) => {
+    logger.error('Socket error', { clientId, error: err.message });
   });
 }

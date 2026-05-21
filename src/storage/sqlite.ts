@@ -1,8 +1,3 @@
-// SQLite 스토리지 어댑터 스텁
-// Phase 2에서 실제 SQLite 연동을 구현할 예정입니다.
-// 현재는 IStorage 인터페이스를 구현하되 모든 메서드가
-// "Not implemented" 에러를 발생시킵니다.
-
 import { IStorage } from './interface';
 
 export class SqliteStorage implements IStorage {

@@ -1,38 +1,34 @@
-// 환경변수와 기본값을 관리하는 설정 모듈
-// 포트, 호스트, 로그 레벨을 환경변수에서 읽어오며 기본값을 제공합니다.
-
 export interface Config {
   port: number;
   host: string;
   logLevel: string;
 }
 
-// 로그 레벨 우선순위 (낮을수록 더 많은 로그 출력)
-const LOG_LEVELS: Record<string, number> = {
+export const LOG_LEVELS: Record<string, number> = {
   debug: 0,
   info: 1,
   warn: 2,
   error: 3,
 };
 
-function parsePort(value: string | undefined, defaultValue: number): number {
+export function parsePort(value: string | undefined, defaultValue: number): number {
   if (value === undefined) {
     return defaultValue;
   }
-  const parsed = parseInt(value, 10);
-  if (isNaN(parsed) || parsed < 1 || parsed > 65535) {
-    throw new Error(`유효하지 않은 포트 번호: ${value}`);
+  const port = parseInt(value, 10);
+  if (isNaN(port) || port < 1 || port > 65535) {
+    throw new Error('유효하지 않은 포트 번호');
   }
-  return parsed;
+  return port;
 }
 
-function parseLogLevel(value: string | undefined, defaultValue: string): string {
+export function parseLogLevel(value: string | undefined, defaultValue: string): string {
   if (value === undefined) {
     return defaultValue;
   }
   const normalized = value.toLowerCase();
   if (!(normalized in LOG_LEVELS)) {
-    throw new Error(`유효하지 않은 로그 레벨: ${value}. 사용 가능: debug, info, warn, error`);
+    throw new Error('유효하지 않은 로그 레벨');
   }
   return normalized;
 }
@@ -51,5 +47,4 @@ export function isLogLevelEnabled(configLevel: string, messageLevel: string): bo
   return messagePriority >= configPriority;
 }
 
-// 싱글톤 설정 객체
 export const config: Config = loadConfig();
