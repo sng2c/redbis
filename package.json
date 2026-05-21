@@ -13,9 +13,9 @@
   "scripts": {
     "build": "tsc",
     "dev:memory": "ts-node src/index.ts",
-    "dev:sqlite": "STORAGE_TYPE=sqlite ts-node src/index.ts",
+    "dev:sqlite": "DATABASE_URL=sqlite://./data/redbis.db ts-node src/index.ts",
     "start:memory": "node dist/index.js",
-    "start:sqlite": "STORAGE_TYPE=sqlite node dist/index.js",
+    "start:sqlite": "DATABASE_URL=sqlite://./data/redbis.db node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "npm run build"

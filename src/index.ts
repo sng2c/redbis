@@ -17,7 +17,7 @@ async function main(): Promise<void> {
     port: appConfig.port,
     host: appConfig.host,
     logLevel: appConfig.logLevel,
-    storageType: appConfig.storageType,
+    databaseUrl: appConfig.databaseUrl,
   });
 
   // 스토리지 생성

@@ -212,76 +212,64 @@ describe('Integration: InMemoryStorage with CommandHandler', () => {
 });
 
 describe('createStorage 팩토리', () => {
-  it('storageType이 memory일 때 InMemoryStorage 인스턴스를 반환한다', () => {
+  it('databaseUrl이 memory://일 때 InMemoryStorage 인스턴스를 반환한다', () => {
     const cfg: Config = {
       port: 6379,
       host: '127.0.0.1',
       logLevel: 'info',
-      storageType: 'memory',
-      storagePath: ':memory:',
+      databaseUrl: 'memory://',
     };
     const storage = createStorage(cfg);
     expect(storage).toBeInstanceOf(InMemoryStorage);
   });
 
-  it('storageType이 sqlite일 때 SqliteStorage 인스턴스를 반환한다', () => {
+  it('databaseUrl이 sqlite://일 때 SqliteStorage 인스턴스를 반환한다', () => {
     const cfg: Config = {
       port: 6379,
       host: '127.0.0.1',
       logLevel: 'info',
-      storageType: 'sqlite',
-      storagePath: ':memory:',
+      databaseUrl: 'sqlite://:memory:',
     };
     const storage = createStorage(cfg);
     expect(storage).toBeInstanceOf(SqliteStorage);
   });
 
-  it('storageType이 알 수 없는 값일 때 에러를 throw한다', () => {
+  it('databaseUrl이 지원하지 않는 스킴일 때 에러를 throw한다', () => {
     const cfg = {
       port: 6379,
       host: '127.0.0.1',
       logLevel: 'info',
-      storageType: 'cassandra' as 'memory' | 'sqlite',
-      storagePath: ':memory:',
+      databaseUrl: 'cassandra://host',
     };
     expect(() => createStorage(cfg as Config)).toThrow(
-      "Unknown storage type: cassandra"
+      "Unsupported connection string scheme: cassandra"
     );
   });
 
   describe('환경변수와 함께 loadConfig → createStorage', () => {
-    let originalStorageType: string | undefined;
-    let originalStoragePath: string | undefined;
+    let originalDatabaseUrl: string | undefined;
 
     beforeEach(() => {
-      originalStorageType = process.env.STORAGE_TYPE;
-      originalStoragePath = process.env.STORAGE_PATH;
+      originalDatabaseUrl = process.env.DATABASE_URL;
     });
 
     afterEach(() => {
-      if (originalStorageType === undefined) {
-        delete process.env.STORAGE_TYPE;
+      if (originalDatabaseUrl === undefined) {
+        delete process.env.DATABASE_URL;
       } else {
-        process.env.STORAGE_TYPE = originalStorageType;
-      }
-      if (originalStoragePath === undefined) {
-        delete process.env.STORAGE_PATH;
-      } else {
-        process.env.STORAGE_PATH = originalStoragePath;
+        process.env.DATABASE_URL = originalDatabaseUrl;
       }
     });
 
-    it('STORAGE_TYPE=memory 환경변수로 InMemoryStorage 생성', () => {
-      process.env.STORAGE_TYPE = 'memory';
-      delete process.env.STORAGE_PATH;
+    it('DATABASE_URL=memory:// 환경변수로 InMemoryStorage 생성', () => {
+      process.env.DATABASE_URL = 'memory://';
       const config = loadConfig();
       const storage = createStorage(config);
       expect(storage).toBeInstanceOf(InMemoryStorage);
     });
 
-    it('STORAGE_TYPE=sqlite 환경변수로 SqliteStorage 생성', () => {
-      process.env.STORAGE_TYPE = 'sqlite';
-      process.env.STORAGE_PATH = ':memory:';
+    it('DATABASE_URL=sqlite:// 환경변수로 SqliteStorage 생성', () => {
+      process.env.DATABASE_URL = 'sqlite://:memory:';
       const config = loadConfig();
       const storage = createStorage(config);
       expect(storage).toBeInstanceOf(SqliteStorage);
