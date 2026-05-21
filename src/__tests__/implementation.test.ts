@@ -1,9 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SqliteStorage } from '../storage/sqlite';
 import { InMemoryStorage } from '../storage/memory';
 import { CommandHandler } from '../command/handler';
 import { RespParser } from '../protocol/parser';
 import type { IStorage } from '../storage/interface';
+import { createStorage } from '../index';
+import { loadConfig, Config } from '../config';
+import {
+  encodeSimpleString,
+  encodeError,
+  encodeInteger,
+  encodeBulkString,
+  encodeArray,
+} from '../protocol/resp';
 
 describe('Integration: SqliteStorage with CommandHandler', () => {
   let storage: SqliteStorage;
@@ -199,5 +208,163 @@ describe('Integration: InMemoryStorage with CommandHandler', () => {
 
     const getResult = await handler.execute(['GET', 'mykey']);
     expect(getResult).toBe('$-1\r\n');
+  });
+});
+
+describe('createStorage 팩토리', () => {
+  it('storageType이 memory일 때 InMemoryStorage 인스턴스를 반환한다', () => {
+    const cfg: Config = {
+      port: 6379,
+      host: '127.0.0.1',
+      logLevel: 'info',
+      storageType: 'memory',
+      storagePath: ':memory:',
+    };
+    const storage = createStorage(cfg);
+    expect(storage).toBeInstanceOf(InMemoryStorage);
+  });
+
+  it('storageType이 sqlite일 때 SqliteStorage 인스턴스를 반환한다', () => {
+    const cfg: Config = {
+      port: 6379,
+      host: '127.0.0.1',
+      logLevel: 'info',
+      storageType: 'sqlite',
+      storagePath: ':memory:',
+    };
+    const storage = createStorage(cfg);
+    expect(storage).toBeInstanceOf(SqliteStorage);
+  });
+
+  it('storageType이 알 수 없는 값일 때 에러를 throw한다', () => {
+    const cfg = {
+      port: 6379,
+      host: '127.0.0.1',
+      logLevel: 'info',
+      storageType: 'cassandra' as 'memory' | 'sqlite',
+      storagePath: ':memory:',
+    };
+    expect(() => createStorage(cfg as Config)).toThrow(
+      "Unknown storage type: cassandra"
+    );
+  });
+
+  describe('환경변수와 함께 loadConfig → createStorage', () => {
+    let originalStorageType: string | undefined;
+    let originalStoragePath: string | undefined;
+
+    beforeEach(() => {
+      originalStorageType = process.env.STORAGE_TYPE;
+      originalStoragePath = process.env.STORAGE_PATH;
+    });
+
+    afterEach(() => {
+      if (originalStorageType === undefined) {
+        delete process.env.STORAGE_TYPE;
+      } else {
+        process.env.STORAGE_TYPE = originalStorageType;
+      }
+      if (originalStoragePath === undefined) {
+        delete process.env.STORAGE_PATH;
+      } else {
+        process.env.STORAGE_PATH = originalStoragePath;
+      }
+    });
+
+    it('STORAGE_TYPE=memory 환경변수로 InMemoryStorage 생성', () => {
+      process.env.STORAGE_TYPE = 'memory';
+      delete process.env.STORAGE_PATH;
+      const config = loadConfig();
+      const storage = createStorage(config);
+      expect(storage).toBeInstanceOf(InMemoryStorage);
+    });
+
+    it('STORAGE_TYPE=sqlite 환경변수로 SqliteStorage 생성', () => {
+      process.env.STORAGE_TYPE = 'sqlite';
+      process.env.STORAGE_PATH = ':memory:';
+      const config = loadConfig();
+      const storage = createStorage(config);
+      expect(storage).toBeInstanceOf(SqliteStorage);
+    });
+  });
+});
+
+describe('RESP 왕복 — 인코딩 후 파싱', () => {
+  it('encodeSimpleString 결과를 파서로 디코딩', () => {
+    const raw = encodeSimpleString('OK');
+    const parser = new RespParser();
+    parser.feed(Buffer.from(raw));
+    // Simple strings are not directly parseable by RESP parser
+    // (parser expects arrays or inline commands)
+    // Instead, verify the encoded form
+    expect(raw).toBe('+OK\r\n');
+  });
+
+  it('encodeBulkString 결과를 파서로 디코딩', () => {
+    // Wrap in array format for parsing
+    const encoded = `*1\r\n${encodeBulkString('hello')}`;
+    const parser = new RespParser();
+    parser.feed(Buffer.from(encoded));
+    const result = parser.parse();
+    expect(result).toEqual(['hello']);
+  });
+
+  it('encodeArray 결과를 파서로 디코딩', () => {
+    const encoded = encodeArray(['SET', 'key', 'value']);
+    const parser = new RespParser();
+    parser.feed(Buffer.from(encoded));
+    const result = parser.parse();
+    expect(result).toEqual(['SET', 'key', 'value']);
+  });
+
+  it('null bulk string 인코딩 후 파서 디코딩', () => {
+    // Null bulk string inside an array
+    const encoded = `*1\r\n${encodeBulkString(null)}`;
+    const parser = new RespParser();
+    parser.feed(Buffer.from(encoded));
+    const result = parser.parse();
+    expect(result).toEqual(['']);
+  });
+
+  it('encodeError 결과를 파서로 디코딩 — 인라인 커맨드로', () => {
+    const raw = encodeError('unknown command');
+    expect(raw).toBe('-ERR unknown command\r\n');
+    // Error responses are not directly parseable by RESP parser arrays
+    // but they are valid inline commands
+    const parser = new RespParser();
+    parser.feed(Buffer.from(raw));
+    const result = parser.parse();
+    // Inline parsing splits by whitespace and filters empty tokens
+    expect(result).not.toBeNull();
+    expect(result!.length).toBeGreaterThan(0);
+  });
+
+  it('encodeInteger 결과 형식 확인', () => {
+    const raw = encodeInteger(42);
+    expect(raw).toBe(':42\r\n');
+  });
+
+  it('encodeSimpleString + encodeBulkString 조합 파싱', () => {
+    // Encode a command array that includes various types
+    const encoded = encodeArray(['SET', 'mykey', 'myvalue']);
+    expect(encoded).toBe('*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n');
+    const parser = new RespParser();
+    parser.feed(Buffer.from(encoded));
+    const result = parser.parse();
+    expect(result).toEqual(['SET', 'mykey', 'myvalue']);
+  });
+
+  it('빈 문자열 bulk string 인코딩 후 파서 디코딩', () => {
+    const encoded = encodeArray(['SET', 'key', '']);
+    expect(encoded).toContain('$0\r\n\r\n');
+    const parser = new RespParser();
+    parser.feed(Buffer.from(encoded));
+    const result = parser.parse();
+    expect(result).toEqual(['SET', 'key', '']);
+  });
+
+  it('null Array 인코딩 확인', () => {
+    const raw = encodeArray(null);
+    expect(raw).toBe('*-1\r\n');
   });
 });

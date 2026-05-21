@@ -1,5 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SqliteStorage } from '../storage/sqlite';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 describe('SqliteStorage', () => {
   let storage: SqliteStorage;
@@ -112,6 +115,148 @@ describe('SqliteStorage', () => {
       await storage.flush();
       const result = await storage.keys('*');
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('SQL 특수문자 포함 값의 set/get', () => {
+    it('작은따옴표, 세미콜론, 대시 등 SQL 특수문자가 포함된 값을 정확히 저장·조회한다', async () => {
+      const specialValues = [
+        "value with 'quotes'",
+        "value; DROP TABLE kv_store; --",
+        "OR 1=1",
+        "-- comment",
+        "'; --",
+        "normal_value",
+      ];
+      for (const val of specialValues) {
+        const key = `key_${val.length}`;
+        await storage.set(key, val);
+        const result = await storage.get(key);
+        expect(result).toBe(val);
+      }
+    });
+  });
+
+  describe('SQL 특수문자 포함 키의 set/get/delete', () => {
+    it('작은따옴표, 세미콜론 등이 포함된 키로 set/get/delete가 정확히 동작한다', async () => {
+      const specialKeys = [
+        "key'with'quotes",
+        "key;semicolon",
+        "key--dash",
+        "key OR 1=1",
+      ];
+      for (const key of specialKeys) {
+        await storage.set(key, `value_of_${key}`);
+      }
+      for (const key of specialKeys) {
+        const result = await storage.get(key);
+        expect(result).toBe(`value_of_${key}`);
+      }
+      // delete 테스트
+      const deleted = await storage.delete("key'with'quotes");
+      expect(deleted).toBe(true);
+      expect(await storage.get("key'with'quotes")).toBeNull();
+    });
+  });
+
+  describe('파일 DB 영속성 테스트', () => {
+    let tmpDir: string;
+    let dbPath: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'redbis-test-'));
+      dbPath = path.join(tmpDir, 'test.db');
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('파일 DB에서 set 후 get이 데이터를 영속적으로 보존한다', async () => {
+      // 첫 번째 인스턴스에서 데이터 쓰기
+      const storage1 = new SqliteStorage({ path: dbPath });
+      await storage1.set('persist_key', 'persist_value');
+      // 인스턴스를 명시적으로 닫지 않아도 better-sqlite3는 동기식이므로 바로 반영됨
+
+      // 두 번째 인스턴스에서 데이터 조회
+      const storage2 = new SqliteStorage({ path: dbPath });
+      const result = await storage2.get('persist_key');
+      expect(result).toBe('persist_value');
+    });
+  });
+
+  describe('동시 set 연산', () => {
+    it('여러 키를 동시에 set한 후 모두 get 가능하다', async () => {
+      const count = 50;
+      const promises = [];
+      for (let i = 0; i < count; i++) {
+        promises.push(storage.set(`concurrent_key_${i}`, `concurrent_val_${i}`));
+      }
+      await Promise.all(promises);
+
+      for (let i = 0; i < count; i++) {
+        const result = await storage.get(`concurrent_key_${i}`);
+        expect(result).toBe(`concurrent_val_${i}`);
+      }
+    });
+  });
+
+  describe('동시 set/get/delete 혼합 연산', () => {
+    it('race condition 없이 모두 정상 동작한다', async () => {
+      // 초기 데이터 설정
+      await storage.set('mix_key1', 'mix_val1');
+      await storage.set('mix_key2', 'mix_val2');
+
+      const operations = [
+        storage.set('mix_key1', 'updated_val1'),
+        storage.get('mix_key2'),
+        storage.delete('mix_key2'),
+        storage.set('mix_key3', 'mix_val3'),
+      ];
+      await Promise.all(operations);
+
+      // 최종 상태 검증
+      expect(await storage.get('mix_key1')).toBe('updated_val1');
+      expect(await storage.get('mix_key2')).toBeNull(); // 삭제됨
+      expect(await storage.get('mix_key3')).toBe('mix_val3');
+    });
+  });
+
+  describe('flush 후 빈 상태 확인', () => {
+    it('flush 후 keys(*)가 빈 배열을 반환한다', async () => {
+      await storage.set('fkey1', 'fval1');
+      await storage.set('fkey2', 'fval2');
+      await storage.flush();
+      const result = await storage.keys('*');
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('매우 긴 문자열 값의 set/get', () => {
+    it('10,000자 이상 문자열이 정확히 저장·조회된다', async () => {
+      const longValue = 'A'.repeat(10000);
+      await storage.set('long_key', longValue);
+      const result = await storage.get('long_key');
+      expect(result).toBe(longValue);
+      expect(result!.length).toBe(10000);
+    });
+  });
+
+  describe('이모지 포함 값의 set/get', () => {
+    it('이모지, 한글, 일본어 등 유니코드 값이 정확히 저장·조회된다', async () => {
+      const unicodeValues = [
+        { key: 'emoji', value: '🎉🎊🎈' },
+        { key: 'korean', value: '한글테스트' },
+        { key: 'japanese', value: '日本語テスト' },
+        { key: 'mixed', value: 'Hello🎉世界' },
+      ];
+      for (const { key, value } of unicodeValues) {
+        await storage.set(key, value);
+      }
+      for (const { key, value } of unicodeValues) {
+        const result = await storage.get(key);
+        expect(result).toBe(value);
+      }
     });
   });
 });

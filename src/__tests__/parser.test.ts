@@ -105,4 +105,73 @@ describe('RespParser', () => {
       expect(parser.parse()).toBeNull();
     });
   });
+
+  describe('0-요소 배열 파싱', () => {
+    it('*0\\r\\n은 빈 배열을 반환한다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('*0\r\n'));
+      expect(parser.parse()).toEqual([]);
+    });
+  });
+
+  describe('배열 내 null bulk string', () => {
+    it('null bulk string이 포함된 배열을 파싱하면 빈 문자열로 처리한다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('*2\r\n$3\r\nfoo\r\n$-1\r\n'));
+      expect(parser.parse()).toEqual(['foo', '']);
+    });
+  });
+
+  describe('비숫자 count 값', () => {
+    it('배열 접두사가 숫자가 아닌 경우 null을 반환한다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('*abc\r\n$3\r\nfoo\r\n'));
+      expect(parser.parse()).toBeNull();
+    });
+  });
+
+  describe('빈 인라인 커맨드', () => {
+    it('빈 줄 \\r\\n은 빈 토큰 배열을 반환한다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('\r\n'));
+      expect(parser.parse()).toEqual([]);
+    });
+  });
+
+  describe('혼합 타입 요소 배열', () => {
+    it('Simple String과 Integer가 혼합된 배열은 파싱할 수 없다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('*3\r\n+OK\r\n:100\r\n$3\r\nbar\r\n'));
+      // 현재 파서는 배열 내 요소로 bulk string($ prefix)만 지원
+      expect(parser.parse()).toBeNull();
+    });
+  });
+
+  describe('연속 파싱 - 여러 인라인 커맨드', () => {
+    it('여러 인라인 커맨드를 한 번에 feed 후 parse 반복 호출로 모두 소비한다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('PING\r\nSET key val\r\n'));
+      expect(parser.parse()).toEqual(['PING']);
+      expect(parser.parse()).toEqual(['SET', 'key', 'val']);
+      expect(parser.parse()).toBeNull();
+    });
+  });
+
+  describe('부분 데이터 후 추가 feed', () => {
+    it('첫 feed로 불완전한 데이터를 넣고 두 번째 feed로 완성한다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from('*1\r\n$5\r\nhel'));
+      expect(parser.parse()).toBeNull();
+      parser.feed(Buffer.from('lo\r\n'));
+      expect(parser.parse()).toEqual(['hello']);
+    });
+  });
+
+  describe('음수 정수 인라인 파싱', () => {
+    it(':-1000\\r\\n은 인라인 커맨드로 파싱된다', () => {
+      const parser = new RespParser();
+      parser.feed(Buffer.from(':-1000\r\n'));
+      expect(parser.parse()).toEqual([':-1000']);
+    });
+  });
 });

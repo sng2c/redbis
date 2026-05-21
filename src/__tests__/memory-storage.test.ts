@@ -110,4 +110,88 @@ describe('InMemoryStorage', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('정규식 특수문자 키 set/get/delete', () => {
+    it('정규식 특수문자가 포함된 키로 set/get이 정확히 동작한다', async () => {
+      const specialKeys = [
+        'key.with.dots',
+        'key*star',
+        'key?question',
+        'key[bracket]',
+        'key(paren)',
+        'key{brace}',
+        'key+plus',
+        'key^caret',
+        'key$dollar',
+        'key|pipe',
+        'key\\backslash',
+      ];
+      for (const key of specialKeys) {
+        await storage.set(key, `value_of_${key}`);
+      }
+      for (const key of specialKeys) {
+        const result = await storage.get(key);
+        expect(result).toBe(`value_of_${key}`);
+      }
+    });
+
+    it('정규식 특수문자가 포함된 키의 delete가 정확히 동작한다', async () => {
+      await storage.set('key[1]', 'val1');
+      await storage.set('key[2]', 'val2');
+      await storage.set('other', 'val3');
+
+      const deleted = await storage.delete('key[1]');
+      expect(deleted).toBe(true);
+      expect(await storage.get('key[1]')).toBeNull();
+      // 다른 키는 영향을 받지 않는다
+      expect(await storage.get('key[2]')).toBe('val2');
+      expect(await storage.get('other')).toBe('val3');
+    });
+  });
+
+  describe('정규식 특수문자 키 패턴 매칭', () => {
+    it('점(.)이 포함된 패턴은 리터럴 점으로만 매칭한다', async () => {
+      await storage.set('prefix.abc', 'val1');
+      await storage.set('prefixXabc', 'val2');
+      await storage.set('prefixYabc', 'val3');
+
+      const result = await storage.keys('prefix.*');
+      // InMemoryStorage의 globToRegex은 .을 리터럴로 이스케이프하므로
+      // 점이 포함된 키만 매칭되어야 한다
+      expect(result).toEqual(['prefix.abc']);
+    });
+
+    it('대괄호가 포함된 키를 패턴으로 정확히 매칭한다', async () => {
+      await storage.set('test[item]', 'val1');
+      await storage.set('testitem', 'val2');
+
+      const result = await storage.keys('test[item]');
+      expect(result).toEqual(['test[item]']);
+    });
+  });
+
+  describe('빈 문자열 키 set/get/delete', () => {
+    it('빈 문자열 키로 set/get이 동작한다', async () => {
+      await storage.set('', 'empty_key_value');
+      const result = await storage.get('');
+      expect(result).toBe('empty_key_value');
+    });
+
+    it('빈 문자열 키를 delete할 수 있다', async () => {
+      await storage.set('', 'empty_key_value');
+      const deleted = await storage.delete('');
+      expect(deleted).toBe(true);
+      expect(await storage.get('')).toBeNull();
+    });
+  });
+
+  describe('keys(*) 모든 키 반환', () => {
+    it('keys(*)가 모든 키를 반환한다', async () => {
+      await storage.set('alpha', '1');
+      await storage.set('beta', '2');
+      await storage.set('gamma', '3');
+      const result = await storage.keys('*');
+      expect(result.sort()).toEqual(['alpha', 'beta', 'gamma']);
+    });
+  });
 });

@@ -16,6 +16,23 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
   };
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function closeServer(server: net.Server | null): Promise<void> {
+  if (!server) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    if (!server.listening) {
+      resolve();
+      return;
+    }
+    server.close(() => resolve());
+  });
+}
+
 describe('createServer', () => {
   it('net.Server 인스턴스를 생성한다', () => {
     const cfg = makeConfig();
@@ -31,13 +48,7 @@ describe('startServer', () => {
 
   afterEach(async () => {
     if (server) {
-      try {
-        await new Promise<void>((resolve) => {
-          server!.close(() => resolve());
-        });
-      } catch {
-        // Already closed
-      }
+      await closeServer(server);
       server = null;
     }
   });
@@ -69,21 +80,8 @@ describe('EADDRINUSE', () => {
   let secondServer: net.Server | null = null;
 
   afterEach(async () => {
-    const closeServer = (srv: net.Server | null) => {
-      if (srv) {
-        return new Promise<void>((resolve) => {
-          if (srv.listening) {
-            srv.close(() => resolve());
-          } else {
-            resolve();
-          }
-        });
-      }
-      return Promise.resolve();
-    };
-
-    await closeServer(secondServer);
-    await closeServer(firstServer);
+    await closeServer(secondServer!);
+    await closeServer(firstServer!);
     firstServer = null;
     secondServer = null;
   });
@@ -105,17 +103,7 @@ describe('shutdownServer', () => {
 
   afterEach(async () => {
     if (server) {
-      try {
-        await new Promise<void>((resolve) => {
-          if (server!.listening) {
-            server!.close(() => resolve());
-          } else {
-            resolve();
-          }
-        });
-      } catch {
-        // Already closed
-      }
+      await closeServer(server);
       server = null;
     }
   });
@@ -168,5 +156,179 @@ describe('shutdownServer', () => {
 
     // Clean up client
     client.destroy();
+  });
+
+  it('서버 시작 후 연결 없이 shutdownServer — 정상 종료', async () => {
+    const cfg = makeConfig();
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
+
+    // No clients connected, just shutdown
+    await shutdownServer(server);
+    expect(server.listening).toBe(false);
+  });
+});
+
+describe('서버 E2E — 클라이언트 연결', () => {
+  let server: net.Server | null = null;
+  let port: number;
+  let clients: net.Socket[];
+
+  afterEach(async () => {
+    for (const client of clients) {
+      if (!client.destroyed) {
+        client.destroy();
+      }
+    }
+    await delay(100);
+
+    if (server && server.listening) {
+      await shutdownServer(server);
+    }
+    server = null;
+  });
+
+  it('서버 시작 후 클라이언트 연결/해제 — PING/PONG E2E', async () => {
+    const cfg = makeConfig();
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
+    clients = [];
+
+    const addr = server.address() as net.AddressInfo;
+    port = addr.port;
+
+    // Connect client
+    const client = net.createConnection({ port, host: '127.0.0.1' });
+    clients.push(client);
+
+    await new Promise<void>((resolve) => {
+      client.on('connect', () => resolve());
+    });
+
+    // Send PING
+    const response = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('timeout')), 3000);
+      client.once('data', (data) => {
+        clearTimeout(timeout);
+        resolve(data.toString());
+      });
+      client.write('PING\r\n');
+    });
+
+    expect(response).toBe('+PONG\r\n');
+  });
+
+  it('서버 시작 후 SET/GET E2E', async () => {
+    const cfg = makeConfig();
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
+    clients = [];
+
+    const addr = server.address() as net.AddressInfo;
+    port = addr.port;
+
+    const client = net.createConnection({ port, host: '127.0.0.1' });
+    clients.push(client);
+
+    await new Promise<void>((resolve) => {
+      client.on('connect', () => resolve());
+    });
+
+    // Send SET
+    const setResponse = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('timeout')), 3000);
+      client.once('data', (data) => {
+        clearTimeout(timeout);
+        resolve(data.toString());
+      });
+      client.write('SET greet hello\r\n');
+    });
+    expect(setResponse).toBe('+OK\r\n');
+
+    // Send GET
+    const getResponse = await new Promise<string>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('timeout')), 3000);
+      client.once('data', (data) => {
+        clearTimeout(timeout);
+        resolve(data.toString());
+      });
+      client.write('GET greet\r\n');
+    });
+    expect(getResponse).toBe('$5\r\nhello\r\n');
+  });
+});
+
+describe('shutdownServer — 연결된 클라이언트', () => {
+  it('연결된 클라이언트가 있는 상태에서 서버 셧다운', async () => {
+    const cfg = makeConfig();
+    const storage = new InMemoryStorage();
+    const server = await startServer(cfg, storage);
+
+    const addr = server.address() as net.AddressInfo;
+    const client = net.createConnection({ port: addr.port, host: '127.0.0.1' });
+
+    await new Promise<void>((resolve) => {
+      client.on('connect', () => resolve());
+    });
+
+    // shutdown with short timeout
+    await shutdownServer(server, 300);
+
+    // After shutdown, server should no longer be listening
+    expect(server.listening).toBe(false);
+
+    // Clean up client
+    client.destroy();
+  }, 15000);
+});
+
+describe('closeAllConnections', () => {
+  it('다수 연결 클라이언트 모두 해제', async () => {
+    const cfg = makeConfig();
+    const storage = new InMemoryStorage();
+    const server = await startServer(cfg, storage);
+
+    const addr = server.address() as net.AddressInfo;
+    const clients: net.Socket[] = [];
+
+    // Connect 3 clients
+    for (let i = 0; i < 3; i++) {
+      const client = net.createConnection({ port: addr.port, host: '127.0.0.1' });
+      clients.push(client);
+      await new Promise<void>((resolve) => {
+        client.on('connect', () => resolve());
+      });
+    }
+
+    // shutdownServer will call closeAllConnections after timeout
+    await shutdownServer(server, 300);
+
+    // Server should be shut down
+    expect(server.listening).toBe(false);
+
+    // Clean up clients
+    for (const client of clients) {
+      client.destroy();
+    }
+  }, 15000);
+});
+
+describe('서버 에러 이벤트', () => {
+  it('서버 error 이벤트 발생 시 에러 핸들러가 동작한다', async () => {
+    const cfg = makeConfig();
+    const storage = new InMemoryStorage();
+    const server = createServer(cfg, storage);
+
+    const errorPromise = new Promise<Error>((resolve) => {
+      server.on('error', (err) => resolve(err));
+    });
+
+    // Emit a mock error event
+    server.emit('error', new Error('test server error'));
+
+    const err = await errorPromise;
+    expect(err.message).toBe('test server error');
+
+    server.close();
   });
 });

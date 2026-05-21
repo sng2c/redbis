@@ -81,5 +81,52 @@ describe('RESP 인코딩', () => {
     it('단일 요소 배열을 인코딩한다', () => {
       expect(encodeArray(['hello'])).toBe('*1\r\n$5\r\nhello\r\n');
     });
+
+    it('null 요소가 포함된 배열을 인코딩한다', () => {
+      const result = encodeArray(['foo', null, 'bar'] as any);
+      expect(result).toBe('*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n');
+    });
+  });
+
+  describe('encodeBulkString 특수 케이스', () => {
+    it('\\r\\n이 포함된 문자열을 인코딩한다', () => {
+      const result = encodeBulkString('hello\r\nworld');
+      expect(result).toBe('$12\r\nhello\r\nworld\r\n');
+    });
+
+    it('이모지가 포함된 문자열을 인코딩한다', () => {
+      const result = encodeBulkString('🎉안녕');
+      const byteLength = Buffer.byteLength('🎉안녕', 'utf-8');
+      expect(result).toBe(`$${byteLength}\r\n🎉안녕\r\n`);
+    });
+
+    it('대형 문자열(10,000자 이상)을 인코딩한다', () => {
+      const longStr = 'a'.repeat(10001);
+      const result = encodeBulkString(longStr);
+      expect(result).toBe(`$10001\r\n${longStr}\r\n`);
+    });
+  });
+
+  describe('encodeSimpleString 특수 케이스', () => {
+    it('\\r\\n이 포함된 문자열을 인코딩한다', () => {
+      const result = encodeSimpleString('ok\r\ndata');
+      expect(result).toBe('+ok\r\ndata\r\n');
+    });
+  });
+
+  describe('encodeInteger 특수 케이스', () => {
+    it('0을 인코딩한다', () => {
+      expect(encodeInteger(0)).toBe(':0\r\n');
+    });
+
+    it('음수 -42를 인코딩한다', () => {
+      expect(encodeInteger(-42)).toBe(':-42\r\n');
+    });
+  });
+
+  describe('encodeError 특수 케이스', () => {
+    it('특수문자가 포함된 에러 메시지를 인코딩한다', () => {
+      expect(encodeError("unknown command 'FLUSHDB'")).toBe("-ERR unknown command 'FLUSHDB'\r\n");
+    });
   });
 });

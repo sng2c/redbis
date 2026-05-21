@@ -189,4 +189,95 @@ describe('CommandHandler', () => {
       expect(result).toBe('-ERR unknown command\r\n');
     });
   });
+
+  describe('SET 빈 문자열 값', () => {
+    it('빈 문자열을 저장하고 GET 시 빈 문자열을 반환한다', async () => {
+      await handler.execute(['SET', 'emptykey', '']);
+      const result = await handler.execute(['GET', 'emptykey']);
+      expect(result).toBe('$0\r\n\r\n');
+    });
+  });
+
+  describe('SET 중복 키', () => {
+    it('같은 키에 다른 값을 SET하면 최신 값으로 덮어쓴다', async () => {
+      await handler.execute(['SET', 'dupkey', 'val1']);
+      await handler.execute(['SET', 'dupkey', 'val2']);
+      const result = await handler.execute(['GET', 'dupkey']);
+      expect(result).toBe('$4\r\nval2\r\n');
+    });
+  });
+
+  describe('SET 3개 이상 인자', () => {
+    it('SET에 3개 이상 인자를 전달하면 처음 두 값만 사용하고 나머지는 무시한다', async () => {
+      const setResult = await handler.execute(['SET', 'key', 'value', 'extra']);
+      expect(setResult).toBe('+OK\r\n');
+      const getResult = await handler.execute(['GET', 'key']);
+      expect(getResult).toBe('$5\r\nvalue\r\n');
+    });
+  });
+
+  describe('PING 다중 인자', () => {
+    it('PING에 여러 인자를 전달하면 첫 번째 인자만 bulk string으로 반환한다', async () => {
+      const result = await handler.execute(['PING', 'hello', 'world']);
+      expect(result).toBe('$5\r\nhello\r\n');
+    });
+  });
+
+  describe('FLUSHDB 빈 저장소 확인', () => {
+    it('FLUSHDB 후 모든 키가 사라진다', async () => {
+      await handler.execute(['SET', 'key1', 'val1']);
+      await handler.execute(['SET', 'key2', 'val2']);
+      await handler.execute(['FLUSHDB']);
+      const result = await handler.execute(['KEYS', '*']);
+      expect(result).toBe('*0\r\n');
+    });
+  });
+
+  describe('GET 존재하지 않는 키 null bulk 응답', () => {
+    it('존재하지 않는 키를 GET하면 null bulk string을 반환한다', async () => {
+      const result = await handler.execute(['GET', 'nonexistent']);
+      expect(result).toBe('$-1\r\n');
+    });
+  });
+
+  describe('DEL 존재하지 않는 키', () => {
+    it('존재하지 않는 키를 DEL하면 0을 반환한다', async () => {
+      const result = await handler.execute(['DEL', 'nonexistent']);
+      expect(result).toBe(':0\r\n');
+    });
+  });
+
+  describe('KEYS 인자 없이 호출', () => {
+    it('KEYS를 인자 없이 호출하면 에러를 반환한다', async () => {
+      const result = await handler.execute(['KEYS']);
+      expect(result).toBe("-ERR wrong number of arguments for 'KEYS' command\r\n");
+    });
+  });
+
+  describe('지원하지 않는 커맨드 에러', () => {
+    it('알 수 없는 커맨드 FOOBAR에 에러를 반환한다', async () => {
+      const result = await handler.execute(['FOOBAR']);
+      expect(result).toBe("-ERR unknown command 'FOOBAR'\r\n");
+    });
+  });
+
+  describe('대소문자 구분 없는 커맨드', () => {
+    it('소문자 set/get도 동작한다', async () => {
+      await handler.execute(['set', 'lowercase', 'val']);
+      const result = await handler.execute(['get', 'lowercase']);
+      expect(result).toBe('$3\r\nval\r\n');
+    });
+
+    it('소문자 del도 동작한다', async () => {
+      await handler.execute(['SET', 'delkey', 'val']);
+      const result = await handler.execute(['del', 'delkey']);
+      expect(result).toBe(':1\r\n');
+    });
+
+    it('소문자 flushdb도 동작한다', async () => {
+      await handler.execute(['SET', 'k', 'v']);
+      const result = await handler.execute(['flushdb']);
+      expect(result).toBe('+OK\r\n');
+    });
+  });
 });
