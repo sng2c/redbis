@@ -1,19 +1,21 @@
 import * as net from 'net';
 import { Config } from '../config';
-import { handleConnection } from './connection';
+import type { IStorage } from '../storage/interface';
+import { createConnectionHandler } from './connection';
 import { createLogger } from '../logger';
 
 const logger = createLogger('server');
 
-export function createServer(config: Config): net.Server {
+export function createServer(config: Config, storage: IStorage): net.Server {
+  const connectionHandler = createConnectionHandler(storage);
   return net.createServer((socket: net.Socket) => {
-    handleConnection(socket);
+    connectionHandler(socket);
   });
 }
 
-export function startServer(config: Config): Promise<net.Server> {
+export function startServer(config: Config, storage: IStorage): Promise<net.Server> {
   return new Promise((resolve, reject) => {
-    const server = createServer(config);
+    const server = createServer(config, storage);
 
     const onError = (err: Error) => {
       reject(err);

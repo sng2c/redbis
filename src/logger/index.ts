@@ -7,7 +7,7 @@ export interface LogEntry {
   level: LogLevel;
   module: string;
   message: string;
-  data?: Record<string, unknown>;
+  data?: unknown;
 }
 
 export class Logger {
@@ -17,7 +17,7 @@ export class Logger {
     this.module = moduleName;
   }
 
-  private log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
+  private log(level: LogLevel, message: string, data?: unknown): void {
     if (!isLogLevelEnabled(config.logLevel, level)) {
       return;
     }
@@ -27,25 +27,25 @@ export class Logger {
       module: this.module,
       message,
     };
-    if (data !== undefined && Object.keys(data).length > 0) {
+    if (data !== undefined && !(typeof data === 'object' && data !== null && Object.keys(data as Record<string, unknown>).length === 0)) {
       entry.data = data;
     }
     process.stdout.write(JSON.stringify(entry) + '\n');
   }
 
-  public debug(message: string, data?: Record<string, unknown>): void {
+  public debug(message: string, data?: unknown): void {
     this.log('debug', message, data);
   }
 
-  public info(message: string, data?: Record<string, unknown>): void {
+  public info(message: string, data?: unknown): void {
     this.log('info', message, data);
   }
 
-  public warn(message: string, data?: Record<string, unknown>): void {
+  public warn(message: string, data?: unknown): void {
     this.log('warn', message, data);
   }
 
-  public error(message: string, data?: Record<string, unknown>): void {
+  public error(message: string, data?: unknown): void {
     this.log('error', message, data);
   }
 }

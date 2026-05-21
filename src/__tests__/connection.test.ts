@@ -1,6 +1,7 @@
 import * as net from 'net';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { handleConnection, getActiveConnectionCount } from '../server/connection';
+import { createConnectionHandler, getActiveConnectionCount } from '../server/connection';
+import { InMemoryStorage } from '../storage/memory';
 
 function waitForServerListen(server: net.Server): Promise<number> {
   return new Promise((resolve) => {
@@ -39,7 +40,9 @@ describe('handleConnection', () => {
   beforeEach(async () => {
     clients = [];
     baseCount = getActiveConnectionCount();
-    server = net.createServer((socket) => handleConnection(socket));
+    const storage = new InMemoryStorage();
+    const connectionHandler = createConnectionHandler(storage);
+    server = net.createServer((socket) => connectionHandler(socket));
     port = await waitForServerListen(server);
   });
 

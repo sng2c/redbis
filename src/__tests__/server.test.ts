@@ -2,6 +2,7 @@ import * as net from 'net';
 import { describe, it, expect, afterEach } from 'vitest';
 import { createServer, startServer, shutdownServer } from '../server';
 import { Config } from '../config';
+import { InMemoryStorage } from '../storage/memory';
 
 // Helper config for tests using port 0 (OS-assigned)
 function makeConfig(overrides: Partial<Config> = {}): Config {
@@ -9,6 +10,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
     port: 0,
     host: '127.0.0.1',
     logLevel: 'info',
+    storageType: 'memory',
+    storagePath: ':memory:',
     ...overrides,
   };
 }
@@ -16,7 +19,8 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
 describe('createServer', () => {
   it('net.Server 인스턴스를 생성한다', () => {
     const cfg = makeConfig();
-    const server = createServer(cfg);
+    const storage = new InMemoryStorage();
+    const server = createServer(cfg, storage);
     expect(server).toBeInstanceOf(net.Server);
     server.close();
   });
@@ -40,7 +44,8 @@ describe('startServer', () => {
 
   it('서버가 지정된 포트에서 수신 대기한다', async () => {
     const cfg = makeConfig();
-    server = await startServer(cfg);
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
     expect(server).toBeInstanceOf(net.Server);
     expect(server.listening).toBe(true);
 
@@ -50,7 +55,8 @@ describe('startServer', () => {
 
   it('서버가 수신 대기 시작 시 Promise를 해결한다', async () => {
     const cfg = makeConfig();
-    const result = startServer(cfg);
+    const storage = new InMemoryStorage();
+    const result = startServer(cfg, storage);
     expect(result).toBeInstanceOf(Promise);
     server = await result;
     expect(server).toBeDefined();
@@ -85,12 +91,12 @@ describe('EADDRINUSE', () => {
   it('이미 사용 중인 포트에서 EADDRINUSE 에러가 발생한다', async () => {
     // Start first server on port 0 to get an OS-assigned port
     const cfg1 = makeConfig();
-    firstServer = await startServer(cfg1);
+    firstServer = await startServer(cfg1, new InMemoryStorage());
     const usedPort = (firstServer.address() as net.AddressInfo).port;
 
     // Try to start second server on the same port
     const cfg2 = makeConfig({ port: usedPort });
-    await expect(startServer(cfg2)).rejects.toThrow();
+    await expect(startServer(cfg2, new InMemoryStorage())).rejects.toThrow();
   });
 });
 
@@ -116,7 +122,8 @@ describe('shutdownServer', () => {
 
   it('서버를 정상적으로 종료한다', async () => {
     const cfg = makeConfig();
-    server = await startServer(cfg);
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
     expect(server.listening).toBe(true);
 
     await shutdownServer(server);
@@ -126,7 +133,8 @@ describe('shutdownServer', () => {
 
   it('연결된 클라이언트가 없을 때 즉시 종료된다', async () => {
     const cfg = makeConfig();
-    server = await startServer(cfg);
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
 
     const start = Date.now();
     await shutdownServer(server);
@@ -138,7 +146,8 @@ describe('shutdownServer', () => {
 
   it('타임아웃이 지나면 강제 종료한다', async () => {
     const cfg = makeConfig();
-    server = await startServer(cfg);
+    const storage = new InMemoryStorage();
+    server = await startServer(cfg, storage);
 
     // Connect a client that stays connected
     const addr = server.address() as net.AddressInfo;

@@ -1,10 +1,203 @@
-// Implementation verification placeholder
-// All core implementation tests are in their respective test files:
-// - parser.test.ts, logger.test.ts, command.test.ts
-// - config.test.ts, connection.test.ts, server.test.ts, sqlite.test.ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SqliteStorage } from '../storage/sqlite';
+import { InMemoryStorage } from '../storage/memory';
+import { CommandHandler } from '../command/handler';
+import { RespParser } from '../protocol/parser';
+import type { IStorage } from '../storage/interface';
 
-import { describe, it, expect } from 'vitest';
+describe('Integration: SqliteStorage with CommandHandler', () => {
+  let storage: SqliteStorage;
+  let handler: CommandHandler;
 
-describe('implementation', () => {
-  it.todo('integration tests to be added');
+  beforeEach(() => {
+    storage = new SqliteStorage({ path: ':memory:' });
+    handler = new CommandHandler(storage);
+  });
+
+  it('SET then GET round-trip', async () => {
+    const setResult = await handler.execute(['SET', 'foo', 'bar']);
+    expect(setResult).toBe('+OK\r\n');
+
+    const getResult = await handler.execute(['GET', 'foo']);
+    expect(getResult).toBe('$3\r\nbar\r\n');
+  });
+
+  it('GET missing key returns null bulk string', async () => {
+    const result = await handler.execute(['GET', 'missing']);
+    expect(result).toBe('$-1\r\n');
+  });
+
+  it('DEL deletes a key and subsequent GET returns null', async () => {
+    await handler.execute(['SET', 'mykey', 'myval']);
+    const delResult = await handler.execute(['DEL', 'mykey']);
+    expect(delResult).toBe(':1\r\n');
+
+    const getResult = await handler.execute(['GET', 'mykey']);
+    expect(getResult).toBe('$-1\r\n');
+  });
+
+  it('KEYS with patterns returns matching keys', async () => {
+    await handler.execute(['SET', 'user:1', 'alice']);
+    await handler.execute(['SET', 'user:2', 'bob']);
+    await handler.execute(['SET', 'post:1', 'hello']);
+
+    const result = await handler.execute(['KEYS', 'user:*']);
+    expect(result).toContain('user:1');
+    expect(result).toContain('user:2');
+    expect(result).not.toContain('post:1');
+  });
+
+  it('EXISTS returns 1 for existing key and 0 after deletion', async () => {
+    await handler.execute(['SET', 'mykey', 'myval']);
+
+    const existsResult = await handler.execute(['EXISTS', 'mykey']);
+    expect(existsResult).toBe(':1\r\n');
+
+    await handler.execute(['DEL', 'mykey']);
+    const existsAfterDel = await handler.execute(['EXISTS', 'mykey']);
+    expect(existsAfterDel).toBe(':0\r\n');
+  });
+
+  it('FLUSHDB removes all keys', async () => {
+    await handler.execute(['SET', 'key1', 'val1']);
+    await handler.execute(['SET', 'key2', 'val2']);
+
+    const flushResult = await handler.execute(['FLUSHDB']);
+    expect(flushResult).toBe('+OK\r\n');
+
+    const getResult1 = await handler.execute(['GET', 'key1']);
+    expect(getResult1).toBe('$-1\r\n');
+
+    const getResult2 = await handler.execute(['GET', 'key2']);
+    expect(getResult2).toBe('$-1\r\n');
+  });
+
+  it('PING with no args returns +PONG', async () => {
+    const result = await handler.execute(['PING']);
+    expect(result).toBe('+PONG\r\n');
+  });
+
+  it('PING with args returns bulk string', async () => {
+    const result = await handler.execute(['PING', 'pong']);
+    expect(result).toBe('$4\r\npong\r\n');
+  });
+
+  it('COMMAND returns array of supported commands', async () => {
+    const result = await handler.execute(['COMMAND']);
+    expect(result).toMatch(/^\*\d+\r\n/);
+    expect(result).toContain('PING');
+    expect(result).toContain('SET');
+    expect(result).toContain('GET');
+    expect(result).toContain('DEL');
+    expect(result).toContain('KEYS');
+    expect(result).toContain('EXISTS');
+    expect(result).toContain('FLUSHDB');
+    expect(result).toContain('COMMAND');
+  });
+
+  it('unknown command returns error', async () => {
+    const result = await handler.execute(['UNKNOWNCMD']);
+    expect(result).toBe("-ERR unknown command 'UNKNOWNCMD'\r\n");
+  });
+
+  it('case-insensitive command works', async () => {
+    const setResult = await handler.execute(['set', 'KEY', 'VAL']);
+    expect(setResult).toBe('+OK\r\n');
+
+    const getResult = await handler.execute(['get', 'KEY']);
+    expect(getResult).toBe('$3\r\nVAL\r\n');
+  });
+});
+
+describe('Integration: RESP Parser → CommandHandler → SqliteStorage', () => {
+  let storage: SqliteStorage;
+  let handler: CommandHandler;
+  let parser: RespParser;
+
+  beforeEach(() => {
+    storage = new SqliteStorage({ path: ':memory:' });
+    handler = new CommandHandler(storage);
+    parser = new RespParser();
+  });
+
+  it('parse RESP command and execute SET', async () => {
+    parser.feed(Buffer.from('*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n'));
+    const parsed = parser.parse();
+    expect(parsed).toEqual(['SET', 'foo', 'bar']);
+
+    const result = await handler.execute(parsed!);
+    expect(result).toBe('+OK\r\n');
+  });
+
+  it('multiple commands in sequence persist across commands', async () => {
+    // SET command
+    parser.feed(Buffer.from('*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n'));
+    const parsedSet = parser.parse();
+    const setResult = await handler.execute(parsedSet!);
+    expect(setResult).toBe('+OK\r\n');
+
+    // GET command
+    parser.feed(Buffer.from('*2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n'));
+    const parsedGet = parser.parse();
+    const getResult = await handler.execute(parsedGet!);
+    expect(getResult).toBe('$3\r\nbar\r\n');
+  });
+
+  it('GET after SET returns correct bulk string', async () => {
+    // SET
+    parser.feed(Buffer.from('*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$5\r\nredis\r\n'));
+    const setCmd = parser.parse();
+    await handler.execute(setCmd!);
+
+    // GET
+    parser.feed(Buffer.from('*2\r\n$3\r\nGET\r\n$4\r\nname\r\n'));
+    const getCmd = parser.parse();
+    const result = await handler.execute(getCmd!);
+    expect(result).toBe('$5\r\nredis\r\n');
+  });
+
+  it('DEL after SET returns integer response', async () => {
+    // SET
+    parser.feed(Buffer.from('*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$3\r\nval\r\n'));
+    const setCmd = parser.parse();
+    await handler.execute(setCmd!);
+
+    // DEL
+    parser.feed(Buffer.from('*2\r\n$3\r\nDEL\r\n$3\r\nkey\r\n'));
+    const delCmd = parser.parse();
+    const delResult = await handler.execute(delCmd!);
+    expect(delResult).toBe(':1\r\n');
+  });
+});
+
+describe('Integration: InMemoryStorage with CommandHandler', () => {
+  let storage: InMemoryStorage;
+  let handler: CommandHandler;
+
+  beforeEach(() => {
+    storage = new InMemoryStorage();
+    handler = new CommandHandler(storage);
+  });
+
+  it('SET then GET round-trip', async () => {
+    const setResult = await handler.execute(['SET', 'foo', 'bar']);
+    expect(setResult).toBe('+OK\r\n');
+
+    const getResult = await handler.execute(['GET', 'foo']);
+    expect(getResult).toBe('$3\r\nbar\r\n');
+  });
+
+  it('GET missing key returns null bulk string', async () => {
+    const result = await handler.execute(['GET', 'missing']);
+    expect(result).toBe('$-1\r\n');
+  });
+
+  it('DEL deletes a key', async () => {
+    await handler.execute(['SET', 'mykey', 'myval']);
+    const delResult = await handler.execute(['DEL', 'mykey']);
+    expect(delResult).toBe(':1\r\n');
+
+    const getResult = await handler.execute(['GET', 'mykey']);
+    expect(getResult).toBe('$-1\r\n');
+  });
 });

@@ -2,6 +2,8 @@ export interface Config {
   port: number;
   host: string;
   logLevel: string;
+  storageType: 'memory' | 'sqlite';
+  storagePath: string;
 }
 
 export const LOG_LEVELS: Record<string, number> = {
@@ -34,10 +36,14 @@ export function parseLogLevel(value: string | undefined, defaultValue: string): 
 }
 
 export function loadConfig(): Config {
+  const storageType = (process.env.STORAGE_TYPE ?? 'memory') as 'memory' | 'sqlite';
+  const defaultPath = storageType === 'sqlite' ? './data/redbis.db' : ':memory:';
   return {
     port: parsePort(process.env.REDBIS_PORT, 6379),
     host: process.env.REDBIS_HOST ?? '127.0.0.1',
     logLevel: parseLogLevel(process.env.REDBIS_LOG_LEVEL, 'info'),
+    storageType,
+    storagePath: process.env.STORAGE_PATH ?? defaultPath,
   };
 }
 
