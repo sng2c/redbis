@@ -1,10 +1,15 @@
 import Database from 'better-sqlite3';
+import { mkdirSync } from 'fs';
+import { dirname } from 'path';
 import type { IStorage, StorageConfig } from './interface';
 
 export class SqliteStorage implements IStorage {
   private db: Database.Database;
 
   constructor(config: StorageConfig = { path: ':memory:' }) {
+    if (config.path !== ':memory:') {
+      mkdirSync(dirname(config.path), { recursive: true });
+    }
     this.db = new Database(config.path);
     this.db.prepare(
       'CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL)'
