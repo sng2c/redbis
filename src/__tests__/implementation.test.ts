@@ -4,7 +4,7 @@ import { InMemoryStorage } from '../storage/memory';
 import { CommandHandler } from '../command/handler';
 import { RespParser } from '../protocol/parser';
 import type { IStorage } from '../storage/interface';
-import { createStorage } from '../index';
+import { createStorage } from '../storage/factory';
 import { loadConfig, Config } from '../config';
 import {
   encodeSimpleString,

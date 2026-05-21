@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { loadConfig, isLogLevelEnabled, parsePort, parseLogLevel } from '../config';
-import { createStorage } from '../index';
+import { createStorage } from '../storage/factory';
 import { InMemoryStorage } from '../storage/memory';
 import { SqliteStorage } from '../storage/sqlite';
 
