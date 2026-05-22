@@ -1,26 +1,30 @@
 import * as net from 'net';
 import type { IStorage } from '../storage/interface';
+import { PubSubManager } from '../pubsub/manager';
 import { CommandHandler } from '../command/handler';
 import { RespParser } from '../protocol/parser';
 import { createLogger } from '../logger';
 
 const logger = createLogger('connection');
 const activeSockets = new Set<net.Socket>();
+let connectionCounter = 0;
 
 export function getActiveConnectionCount(): number {
   return activeSockets.size;
 }
 
-export function createConnectionHandler(storage: IStorage): (socket: net.Socket) => void {
+export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager): (socket: net.Socket) => void {
   return function handleConnection(socket: net.Socket): void {
     activeSockets.add(socket);
     const remoteAddress = socket.remoteAddress ?? 'unknown';
     const remotePort = socket.remotePort ?? 0;
     const clientId = `${remoteAddress}:${remotePort}`;
+    const connId = `conn-${++connectionCounter}`;
 
     logger.info('Client connected', { clientId, activeConnections: activeSockets.size });
 
-    const handler = new CommandHandler(storage);
+    const send = (msg: string) => { socket.write(msg); };
+    const handler = new CommandHandler(storage, pubsub, connId, send);
     const parser = new RespParser();
 
     socket.setTimeout(300000);
@@ -42,6 +46,7 @@ export function createConnectionHandler(storage: IStorage): (socket: net.Socket)
     });
 
     socket.on('close', () => {
+      handler.destroy();
       activeSockets.delete(socket);
       logger.info('Client disconnected', { clientId, activeConnections: activeSockets.size });
     });

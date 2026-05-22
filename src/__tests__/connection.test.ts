@@ -2,6 +2,7 @@ import * as net from 'net';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createConnectionHandler, getActiveConnectionCount } from '../server/connection';
 import { InMemoryStorage } from '../storage/memory';
+import { PubSubManager } from '../pubsub/manager';
 import { EventEmitter } from 'events';
 
 function waitForServerListen(server: net.Server): Promise<number> {
@@ -167,7 +168,8 @@ describe('handleConnection', () => {
     clients = [];
     baseCount = getActiveConnectionCount();
     const storage = new InMemoryStorage();
-    const connectionHandler = createConnectionHandler(storage);
+    const pubsub = new PubSubManager();
+    const connectionHandler = createConnectionHandler(storage, pubsub);
     server = net.createServer((socket) => connectionHandler(socket));
     port = await waitForServerListen(server);
   });
@@ -340,11 +342,13 @@ describe('getActiveConnectionCount', () => {
 
 describe('소켓 이벤트 핸들링', () => {
   let storage: InMemoryStorage;
+  let pubsub: PubSubManager;
   let handler: (socket: net.Socket) => void;
 
   beforeEach(() => {
     storage = new InMemoryStorage();
-    handler = createConnectionHandler(storage);
+    pubsub = new PubSubManager();
+    handler = createConnectionHandler(storage, pubsub);
   });
 
   it('소켓 에러 이벤트 — error 이벤트 발생 시 서버 크래시 없이 처리', () => {

@@ -159,6 +159,17 @@ export interface IStorage {
   bzpopmin(keys: string[], timeout: number): Promise<{ key: string; member: string; score: number } | null>;
   bzmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
   zmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
+
+  // === Server / Persistence ===
+
+  /** Force a save/flush of data to persistent storage. No-op for InMemoryStorage. */
+  save(): Promise<void>;
+
+  /** Return server info as a plain-text string (key:value lines). Section is optional (return all info if omitted). */
+  info(section?: string): Promise<string>;
+
+  /** Return the last save time as a Unix timestamp (seconds). 0 if never saved. */
+  getLastSaveTime(): Promise<number>;
 }
 
 export interface StorageConfig {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { CommandHandler } from '../command/handler';
 import { InMemoryStorage } from '../storage/memory';
 import { SqliteStorage } from '../storage/sqlite';
+import { PubSubManager } from '../pubsub/manager';
 
 // ========================================
 // InMemoryStorage Set Tests
@@ -12,7 +13,7 @@ describe('세트(Set) 명령어 — InMemoryStorage', () => {
 
   beforeEach(() => {
     const storage = new InMemoryStorage();
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   describe('세트 멤버 추가 및 조회 (SADD / SREM / SMEMBERS / SCARD)', () => {
@@ -484,7 +485,7 @@ describe('세트(Set) 명령어 — SqliteStorage', () => {
 
   beforeEach(() => {
     const storage = new SqliteStorage({ path: ':memory:' });
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   describe('세트 멤버 추가 및 조회 (SADD / SREM / SMEMBERS / SCARD)', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CommandHandler } from '../command/handler';
 import { InMemoryStorage } from '../storage/memory';
+import { PubSubManager } from '../pubsub/manager';
 
 describe('CommandHandler', () => {
   let handler: CommandHandler;
@@ -8,7 +9,7 @@ describe('CommandHandler', () => {
 
   beforeEach(() => {
     storage = new InMemoryStorage();
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   describe('PING', () => {

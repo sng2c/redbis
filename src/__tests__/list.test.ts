@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { CommandHandler } from '../command/handler';
 import { InMemoryStorage } from '../storage/memory';
 import { SqliteStorage } from '../storage/sqlite';
+import { PubSubManager } from '../pubsub/manager';
 
 // ========================================
 // InMemoryStorage List Tests
@@ -12,7 +13,7 @@ describe('List 명령 — InMemoryStorage', () => {
 
   beforeEach(() => {
     const storage = new InMemoryStorage();
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   describe('LPUSH / RPUSH', () => {
@@ -348,7 +349,7 @@ describe('List 명령 — SqliteStorage', () => {
 
   beforeEach(() => {
     const storage = new SqliteStorage({ path: ':memory:' });
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   describe('LPUSH / RPUSH', () => {

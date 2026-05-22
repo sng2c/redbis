@@ -3,6 +3,7 @@
 // RESP 프로토콜 형식의 응답을 반환합니다.
 
 import { IStorage } from '../storage/interface';
+import { PubSubManager } from '../pubsub/manager';
 import {
   encodeSimpleString,
   encodeError,
@@ -11,11 +12,38 @@ import {
   encodeArray,
 } from '../protocol/resp';
 
+// Slow log support
+interface SlowLogEntry { timestamp: number; command: string[]; duration: number; }
+const slowLog: SlowLogEntry[] = [];
+let slowLogId = 0;
+const SLOWLOG_MAX = 128;
+const SLOWLOG_SLOW_THRESHOLD = 10; // ms
+
+/** Encode a RESP array with pre-encoded (raw) RESP elements. */
+function encodeRawArray(items: string[]): string {
+  return `*${items.length}\r\n${items.join('')}`;
+}
+
 export class CommandHandler {
   private storage: IStorage;
+  private pubsub: PubSubManager;
+  private connId: string;
+  private send: (msg: string) => void;
 
-  constructor(storage: IStorage) {
+  // Transaction state
+  private inMulti: boolean = false;
+  private multiQueue: string[][] = [];
+
+  constructor(storage: IStorage, pubsub: PubSubManager, connId: string, send: (msg: string) => void) {
     this.storage = storage;
+    this.pubsub = pubsub;
+    this.connId = connId;
+    this.send = send;
+  }
+
+  /** Clean up PubSub subscriptions when connection closes. */
+  destroy(): void {
+    this.pubsub.unsubscribeAll(this.connId);
   }
 
   async execute(args: string[]): Promise<string> {
@@ -25,8 +53,48 @@ export class CommandHandler {
 
     const command = args[0].toUpperCase();
 
+    // Transaction queuing: when in MULTI, most commands are queued
+    if (this.inMulti) {
+      if (command === 'MULTI') {
+        return encodeError('MULTI calls can not be nested');
+      }
+      if (command === 'EXEC' || command === 'DISCARD') {
+        // These control the transaction - fall through to dispatch
+      } else {
+        this.multiQueue.push(args);
+        return encodeSimpleString('QUEUED');
+      }
+    }
+
     try {
       switch (command) {
+        // Pub/Sub commands
+        case 'SUBSCRIBE': return this.handleSubscribe(args.slice(1));
+        case 'UNSUBSCRIBE': return this.handleUnsubscribe(args.slice(1));
+        case 'PSUBSCRIBE': return this.handlePsubscribe(args.slice(1));
+        case 'PUNSUBSCRIBE': return this.handlePunsubscribe(args.slice(1));
+        case 'PUBLISH': return await this.handlePublish(args.slice(1));
+        case 'SPUBLISH': return await this.handleSpublish(args.slice(1));
+        case 'SSUBSCRIBE': return this.handleSsubscribe(args.slice(1));
+        case 'SUNSUBSCRIBE': return this.handleSunsubscribe(args.slice(1));
+        case 'PUBSUB': return this.handlePubsub(args.slice(1));
+
+        // Transaction commands
+        case 'MULTI': return this.handleMulti();
+        case 'EXEC': return await this.handleExec();
+        case 'DISCARD': return this.handleDiscard();
+
+        // Server commands
+        case 'INFO': return await this.handleInfo(args.slice(1));
+        case 'TIME': return this.handleTime();
+        case 'LASTSAVE': return await this.handleLastsave();
+        case 'SAVE': return await this.handleSave();
+        case 'SHUTDOWN': return this.handleShutdown();
+        case 'CONFIG': return this.handleConfig(args.slice(1));
+        case 'SLOWLOG': return this.handleSlowlog(args.slice(1));
+        case 'MEMORY': return await this.handleMemory(args.slice(1));
+        case 'DBSIZE': return await this.handleDbsize();
+
         case 'PING':
           return this.ping(args.slice(1));
         case 'SET':
@@ -44,7 +112,7 @@ export class CommandHandler {
         case 'FLUSHALL':
           return await this.handleFlushdb();
         case 'COMMAND':
-          return this.handleCommand();
+          return this.handleCommand(args.slice(1));
 
         // Multi-key
         case 'MGET':
@@ -95,8 +163,7 @@ export class CommandHandler {
           return await this.handleRenamenx(args.slice(1));
         case 'TYPE':
           return await this.handleType(args.slice(1));
-        case 'DBSIZE':
-          return await this.handleDbsize();
+
         case 'COPY':
           return await this.handleCopy(args.slice(1));
         case 'RANDOMKEY':
@@ -443,8 +510,8 @@ export class CommandHandler {
     return encodeSimpleString('OK');
   }
 
-  private handleCommand(): string {
-    const commands = [
+  private getCommandList(): string[] {
+    return [
       'PING', 'SET', 'GET', 'DEL', 'KEYS', 'EXISTS', 'FLUSHDB', 'FLUSHALL', 'COMMAND',
       'MGET', 'MSET', 'MSETNX',
       'APPEND', 'STRLEN', 'GETRANGE', 'SETRANGE',
@@ -454,6 +521,10 @@ export class CommandHandler {
       'EXPIRE', 'EXPIREAT', 'PEXPIRE', 'PEXPIREAT', 'TTL', 'PTTL', 'PERSIST', 'EXPIRETIME', 'PEXPIRETIME',
       'ECHO', 'QUIT',
       'LCS',
+      'SUBSCRIBE', 'UNSUBSCRIBE', 'PSUBSCRIBE', 'PUNSUBSCRIBE', 'PUBLISH',
+      'SPUBLISH', 'SSUBSCRIBE', 'SUNSUBSCRIBE', 'PUBSUB',
+      'MULTI', 'EXEC', 'DISCARD',
+      'INFO', 'TIME', 'LASTSAVE', 'SAVE', 'SHUTDOWN', 'CONFIG', 'SLOWLOG', 'MEMORY',
       'HSET', 'HGET', 'HDEL', 'HGETALL', 'HKEYS', 'HVALS', 'HLEN', 'HEXISTS',
       'HSETNX', 'HMSET', 'HMGET', 'HINCRBY', 'HINCRBYFLOAT', 'HRANDFIELD', 'HSCAN',
       'HSTRLEN', 'HGETDEL', 'HGETEX', 'HSETEX',
@@ -474,7 +545,498 @@ export class CommandHandler {
       'ZINTER', 'ZINTERSTORE', 'ZINTERCARD',
       'BZPOPMAX', 'BZPOPMIN', 'BZMPOP', 'ZMPOP',
     ];
-    return encodeArray(commands);
+  }
+
+  private handleCommand(subArgs: string[]): string {
+    if (subArgs.length === 0) {
+      return encodeArray(this.getCommandList());
+    }
+    const sub = subArgs[0].toUpperCase();
+    switch (sub) {
+      case 'COUNT': return encodeInteger(this.getCommandList().length);
+      case 'INFO': {
+        const results: string[] = [];
+        for (let i = 1; i < subArgs.length; i++) {
+          const name = subArgs[i].toUpperCase();
+          // [name, arity, flags, first_key, last_key, step]
+          const entry = `*6\r\n${encodeBulkString(name)}${encodeInteger(-2)}*0\r\n${encodeInteger(0)}${encodeInteger(0)}${encodeInteger(0)}`;
+          results.push(entry);
+        }
+        return encodeRawArray(results);
+      }
+      case 'DOCS': return encodeArray(null);
+      case 'LIST': return encodeArray(this.getCommandList());
+      case 'GETKEYS': return this.handleCommandGetkeys(subArgs.slice(1));
+      case 'GETKEYSANDFLAGS': return this.handleCommandGetkeysandflags(subArgs.slice(1));
+      default: return encodeError('unknown subcommand');
+    }
+  }
+
+  private handleCommandGetkeys(args: string[]): string {
+    if (args.length === 0) return encodeError('wrong number of arguments for command');
+    const cmd = args[0].toUpperCase();
+    const keys: string[] = [];
+    switch (cmd) {
+      case 'GET': case 'DEL': case 'TYPE': case 'EXISTS':
+      case 'INCR': case 'DECR': case 'INCRBY': case 'DECRBY': case 'INCRBYFLOAT':
+      case 'EXPIRE': case 'EXPIREAT': case 'PEXPIRE': case 'PEXPIREAT':
+      case 'TTL': case 'PTTL': case 'PERSIST': case 'EXPIRETIME': case 'PEXPIRETIME':
+        if (args.length >= 2) keys.push(args[1]);
+        break;
+      case 'SET':
+        if (args.length >= 2) keys.push(args[1]);
+        break;
+      case 'MGET':
+        for (let i = 1; i < args.length; i++) keys.push(args[i]);
+        break;
+      case 'HGET': case 'HDEL': case 'HINCRBY': case 'HINCRBYFLOAT':
+        if (args.length >= 2) keys.push(args[1]);
+        break;
+      case 'HSET': case 'HMSET': case 'HMGET':
+        if (args.length >= 2) keys.push(args[1]);
+        break;
+      default:
+        return encodeError('invalid command for getkeys');
+    }
+    return encodeArray(keys);
+  }
+
+  private handleCommandGetkeysandflags(args: string[]): string {
+    if (args.length === 0) return encodeError('wrong number of arguments for command');
+    const cmd = args[0].toUpperCase();
+    const keys: string[] = [];
+    switch (cmd) {
+      case 'GET': case 'SET': case 'DEL': case 'TYPE': case 'EXISTS':
+      case 'INCR': case 'DECR': case 'INCRBY': case 'DECRBY':
+        if (args.length >= 2) keys.push(args[1]);
+        break;
+      case 'MGET':
+        for (let i = 1; i < args.length; i++) keys.push(args[i]);
+        break;
+      case 'HGET': case 'HSET': case 'HDEL':
+        if (args.length >= 2) keys.push(args[1]);
+        break;
+      default:
+        return encodeError('invalid command for getkeysandflags');
+    }
+    const result: string[] = [];
+    for (const key of keys) {
+      result.push(`*2\r\n${encodeBulkString(key)}*1\r\n$2\r\nRW\r\n`);
+    }
+    return encodeRawArray(result);
+  }
+
+  // === Pub/Sub commands ===
+
+  private handleSubscribe(channels: string[]): string {
+    if (channels.length === 0) return encodeArray(null);
+    const results = this.pubsub.subscribe(this.connId, channels, this.send);
+    return results.join('');
+  }
+
+  private handleUnsubscribe(channels: string[]): string {
+    const results = this.pubsub.unsubscribe(this.connId, channels.length === 0 ? [] : channels);
+    return results.join('');
+  }
+
+  private handlePsubscribe(patterns: string[]): string {
+    if (patterns.length === 0) return encodeArray(null);
+    const results = this.pubsub.psubscribe(this.connId, patterns, this.send);
+    return results.join('');
+  }
+
+  private handlePunsubscribe(patterns: string[]): string {
+    const results = this.pubsub.punsubscribe(this.connId, patterns.length === 0 ? [] : patterns);
+    return results.join('');
+  }
+
+  private async handlePublish(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError('wrong number of arguments for \'PUBLISH\' command');
+    const count = this.pubsub.publish(args[0], args[1]);
+    return encodeInteger(count);
+  }
+
+  private async handleSpublish(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError('wrong number of arguments for \'SPUBLISH\' command');
+    const count = this.pubsub.publish(args[0], args[1]);
+    return encodeInteger(count);
+  }
+
+  private handleSsubscribe(channels: string[]): string {
+    if (channels.length === 0) return encodeArray(null);
+    const results = this.pubsub.subscribe(this.connId, channels, this.send);
+    return results.join('');
+  }
+
+  private handleSunsubscribe(channels: string[]): string {
+    const results = this.pubsub.unsubscribe(this.connId, channels.length === 0 ? [] : channels);
+    return results.join('');
+  }
+
+  private handlePubsub(subArgs: string[]): string {
+    if (subArgs.length === 0) return encodeArray(null);
+    const sub = subArgs[0].toUpperCase();
+    switch (sub) {
+      case 'CHANNELS': {
+        const pattern = subArgs[1];
+        const channels = this.pubsub.getChannels(pattern);
+        return encodeArray(channels);
+      }
+      case 'NUMSUB': {
+        const channels = subArgs.slice(1);
+        const results = this.pubsub.getNumSub(channels);
+        const flat: string[] = [];
+        for (const [ch, count] of results) {
+          flat.push(ch, String(count));
+        }
+        return encodeArray(flat);
+      }
+      case 'NUMPAT': {
+        const count = this.pubsub.getNumPat();
+        return encodeInteger(count);
+      }
+      case 'SHARDCHANNELS': {
+        const pattern = subArgs[1];
+        const channels = this.pubsub.getChannels(pattern);
+        return encodeArray(channels);
+      }
+      case 'SHARDNUMSUB': {
+        const channels = subArgs.slice(1);
+        const results = this.pubsub.getNumSub(channels);
+        const flat: string[] = [];
+        for (const [ch, count] of results) {
+          flat.push(ch, String(count));
+        }
+        return encodeArray(flat);
+      }
+      default:
+        return encodeError('unknown subcommand');
+    }
+  }
+
+  // === Transaction commands ===
+
+  private handleMulti(): string {
+    if (this.inMulti) {
+      return encodeError('MULTI calls can not be nested');
+    }
+    this.inMulti = true;
+    this.multiQueue = [];
+    return encodeSimpleString('OK');
+  }
+
+  private async handleExec(): Promise<string> {
+    if (!this.inMulti) {
+      return encodeError('EXEC without MULTI');
+    }
+    this.inMulti = false;
+    const queue = this.multiQueue;
+    this.multiQueue = [];
+    const results: string[] = [];
+    for (const cmdArgs of queue) {
+      let result: string;
+      try {
+        result = await this.executeDirect(cmdArgs);
+      } catch (e: any) {
+        result = encodeError(e.message);
+      }
+      results.push(result);
+    }
+    return encodeRawArray(results);
+  }
+
+  private handleDiscard(): string {
+    if (!this.inMulti) {
+      return encodeError('DISCARD without MULTI');
+    }
+    this.inMulti = false;
+    this.multiQueue = [];
+    return encodeSimpleString('OK');
+  }
+
+  /** Execute without transaction queuing logic. Used by EXEC. */
+  private async executeDirect(args: string[]): Promise<string> {
+    if (args.length === 0) return encodeError('unknown command');
+    const command = args[0].toUpperCase();
+    try {
+      switch (command) {
+        case 'PING': return this.ping(args.slice(1));
+        case 'SET': return await this.handleSet(args.slice(1));
+        case 'GET': return await this.handleGet(args.slice(1));
+        case 'DEL': return await this.handleDel(args.slice(1));
+        case 'KEYS': return await this.handleKeys(args.slice(1));
+        case 'EXISTS': return await this.handleExists(args.slice(1));
+        case 'FLUSHDB': return await this.handleFlushdb();
+        case 'FLUSHALL': return await this.handleFlushdb();
+        case 'COMMAND': return this.handleCommand(args.slice(1));
+        case 'MGET': return await this.handleMget(args.slice(1));
+        case 'MSET': return await this.handleMset(args.slice(1));
+        case 'MSETNX': return await this.handleMsetnx(args.slice(1));
+        case 'APPEND': return await this.handleAppend(args.slice(1));
+        case 'STRLEN': return await this.handleStrlen(args.slice(1));
+        case 'GETRANGE': return await this.handleGetrange(args.slice(1));
+        case 'SETRANGE': return await this.handleSetrange(args.slice(1));
+        case 'INCR': return await this.handleIncr(args.slice(1));
+        case 'DECR': return await this.handleDecr(args.slice(1));
+        case 'INCRBY': return await this.handleIncrby(args.slice(1));
+        case 'DECRBY': return await this.handleDecrby(args.slice(1));
+        case 'INCRBYFLOAT': return await this.handleIncrbyfloat(args.slice(1));
+        case 'SETNX': return await this.handleSetnx(args.slice(1));
+        case 'SETEX': return await this.handleSetex(args.slice(1));
+        case 'PSETEX': return await this.handlePsetex(args.slice(1));
+        case 'GETSET': return await this.handleGetset(args.slice(1));
+        case 'GETDEL': return await this.handleGetdel(args.slice(1));
+        case 'GETEX': return await this.handleGetex(args.slice(1));
+        case 'RENAME': return await this.handleRename(args.slice(1));
+        case 'RENAMENX': return await this.handleRenamenx(args.slice(1));
+        case 'TYPE': return await this.handleType(args.slice(1));
+        case 'DBSIZE': return await this.handleDbsize();
+        case 'COPY': return await this.handleCopy(args.slice(1));
+        case 'RANDOMKEY': return await this.handleRandomkey();
+        case 'UNLINK': return await this.handleUnlink(args.slice(1));
+        case 'TOUCH': return await this.handleTouch(args.slice(1));
+        case 'SCAN': return await this.handleScan(args.slice(1));
+        case 'EXPIRE': return await this.handleExpire(args.slice(1));
+        case 'EXPIREAT': return await this.handleExpireat(args.slice(1));
+        case 'PEXPIRE': return await this.handlePexpire(args.slice(1));
+        case 'PEXPIREAT': return await this.handlePexpireat(args.slice(1));
+        case 'TTL': return await this.handleTtl(args.slice(1));
+        case 'PTTL': return await this.handlePttl(args.slice(1));
+        case 'PERSIST': return await this.handlePersist(args.slice(1));
+        case 'EXPIRETIME': return await this.handleExpiretime(args.slice(1));
+        case 'PEXPIRETIME': return await this.handlePexpiretime(args.slice(1));
+        case 'ECHO': return this.handleEcho(args.slice(1));
+        case 'QUIT': return this.handleQuit();
+        case 'LCS': return await this.handleLcs(args.slice(1));
+        case 'SUBSCRIBE': return this.handleSubscribe(args.slice(1));
+        case 'UNSUBSCRIBE': return this.handleUnsubscribe(args.slice(1));
+        case 'PSUBSCRIBE': return this.handlePsubscribe(args.slice(1));
+        case 'PUNSUBSCRIBE': return this.handlePunsubscribe(args.slice(1));
+        case 'PUBLISH': return await this.handlePublish(args.slice(1));
+        case 'SPUBLISH': return await this.handleSpublish(args.slice(1));
+        case 'SSUBSCRIBE': return this.handleSsubscribe(args.slice(1));
+        case 'SUNSUBSCRIBE': return this.handleSunsubscribe(args.slice(1));
+        case 'PUBSUB': return this.handlePubsub(args.slice(1));
+        case 'MULTI': return encodeError('MULTI calls can not be nested');
+        case 'EXEC': return encodeError('EXEC without MULTI');
+        case 'DISCARD': return encodeError('DISCARD without MULTI');
+        case 'INFO': return await this.handleInfo(args.slice(1));
+        case 'TIME': return this.handleTime();
+        case 'LASTSAVE': return await this.handleLastsave();
+        case 'SAVE': return await this.handleSave();
+        case 'SHUTDOWN': return this.handleShutdown();
+        case 'CONFIG': return this.handleConfig(args.slice(1));
+        case 'SLOWLOG': return this.handleSlowlog(args.slice(1));
+        case 'MEMORY': return await this.handleMemory(args.slice(1));
+        case 'HSET': return await this.handleHset(args.slice(1));
+        case 'HGET': return await this.handleHget(args.slice(1));
+        case 'HDEL': return await this.handleHdel(args.slice(1));
+        case 'HGETALL': return await this.handleHgetall(args.slice(1));
+        case 'HKEYS': return await this.handleHkeys(args.slice(1));
+        case 'HVALS': return await this.handleHvals(args.slice(1));
+        case 'HLEN': return await this.handleHlen(args.slice(1));
+        case 'HEXISTS': return await this.handleHexists(args.slice(1));
+        case 'HSETNX': return await this.handleHsetnx(args.slice(1));
+        case 'HMSET': return await this.handleHmset(args.slice(1));
+        case 'HMGET': return await this.handleHmget(args.slice(1));
+        case 'HINCRBY': return await this.handleHincrby(args.slice(1));
+        case 'HINCRBYFLOAT': return await this.handleHincrbyfloat(args.slice(1));
+        case 'HRANDFIELD': return await this.handleHrandfield(args.slice(1));
+        case 'HSCAN': return await this.handleHscan(args.slice(1));
+        case 'HSTRLEN': return await this.handleHstrlen(args.slice(1));
+        case 'HGETDEL': return await this.handleHgetdel(args.slice(1));
+        case 'HGETEX': return await this.handleHgetex(args.slice(1));
+        case 'HSETEX': return await this.handleHsetex(args.slice(1));
+        case 'HEXPIRE': return await this.handleHexpire(args.slice(1));
+        case 'HEXPIREAT': return await this.handleHexpireat(args.slice(1));
+        case 'HPEXPIRE': return await this.handleHpexpire(args.slice(1));
+        case 'HPEXPIREAT': return await this.handleHpexpireat(args.slice(1));
+        case 'HEXPIRETIME': return await this.handleHexpiretime(args.slice(1));
+        case 'HPEXPIRETIME': return await this.handleHpexpiretime(args.slice(1));
+        case 'HPERSIST': return await this.handleHpersist(args.slice(1));
+        case 'HTTL': return await this.handleHttl(args.slice(1));
+        case 'HPTTL': return await this.handleHpttl(args.slice(1));
+        case 'LPUSH': return await this.handleLpush(args.slice(1));
+        case 'RPUSH': return await this.handleRpush(args.slice(1));
+        case 'LPOP': return await this.handleLpop(args.slice(1));
+        case 'RPOP': return await this.handleRpop(args.slice(1));
+        case 'LLEN': return await this.handleLlen(args.slice(1));
+        case 'LRANGE': return await this.handleLrange(args.slice(1));
+        case 'LINDEX': return await this.handleLindex(args.slice(1));
+        case 'LSET': return await this.handleLset(args.slice(1));
+        case 'LREM': return await this.handleLrem(args.slice(1));
+        case 'LTRIM': return await this.handleLtrim(args.slice(1));
+        case 'LPOS': return await this.handleLpos(args.slice(1));
+        case 'RPOPLPUSH': return await this.handleRpoplpush(args.slice(1));
+        case 'LPUSHX': return await this.handleLpushx(args.slice(1));
+        case 'RPUSHX': return await this.handleRpushx(args.slice(1));
+        case 'LINSERT': return await this.handleLinsert(args.slice(1));
+        case 'LMOVE': return await this.handleLmove(args.slice(1));
+        case 'BLPOP': return await this.handleBlpop(args.slice(1));
+        case 'BRPOP': return await this.handleBrpop(args.slice(1));
+        case 'BRPOPLPUSH': return await this.handleBrpoplpush(args.slice(1));
+        case 'BLMOVE': return await this.handleBlmove(args.slice(1));
+        case 'LMPOP': return await this.handleLmpop(args.slice(1));
+        case 'SADD': return await this.handleSadd(args.slice(1));
+        case 'SREM': return await this.handleSrem(args.slice(1));
+        case 'SMEMBERS': return await this.handleSmembers(args.slice(1));
+        case 'SCARD': return await this.handleScard(args.slice(1));
+        case 'SISMEMBER': return await this.handleSismember(args.slice(1));
+        case 'SMISMEMBER': return await this.handleSmismember(args.slice(1));
+        case 'SRANDMEMBER': return await this.handleSrandmember(args.slice(1));
+        case 'SPOP': return await this.handleSpop(args.slice(1));
+        case 'SMOVE': return await this.handleSmove(args.slice(1));
+        case 'SDIFF': return await this.handleSdiff(args.slice(1));
+        case 'SINTER': return await this.handleSinter(args.slice(1));
+        case 'SUNION': return await this.handleSunion(args.slice(1));
+        case 'SDIFFSTORE': return await this.handleSdiffstore(args.slice(1));
+        case 'SINTERSTORE': return await this.handleSinterstore(args.slice(1));
+        case 'SUNIONSTORE': return await this.handleSunionstore(args.slice(1));
+        case 'SINTERCARD': return await this.handleSintercard(args.slice(1));
+        case 'SSCAN': return await this.handleSscan(args.slice(1));
+        case 'ZADD': return await this.handleZadd(args.slice(1));
+        case 'ZREM': return await this.handleZrem(args.slice(1));
+        case 'ZSCORE': return await this.handleZscore(args.slice(1));
+        case 'ZCARD': return await this.handleZcard(args.slice(1));
+        case 'ZRANGE': return await this.handleZrange(args.slice(1));
+        case 'ZREVRANGE': return await this.handleZrevrange(args.slice(1));
+        case 'ZRANGEBYSCORE': return await this.handleZrangebyscore(args.slice(1));
+        case 'ZREVRANGEBYSCORE': return await this.handleZrevrangebyscore(args.slice(1));
+        case 'ZRANGEBYLEX': return await this.handleZrangebylex(args.slice(1));
+        case 'ZREVRANGEBYLEX': return await this.handleZrevrangebylex(args.slice(1));
+        case 'ZRANK': return await this.handleZrank(args.slice(1));
+        case 'ZREVRANK': return await this.handleZrevrank(args.slice(1));
+        case 'ZINCRBY': return await this.handleZincrby(args.slice(1));
+        case 'ZCOUNT': return await this.handleZcount(args.slice(1));
+        case 'ZREMRANGEBYRANK': return await this.handleZremrangebyrank(args.slice(1));
+        case 'ZREMRANGEBYSCORE': return await this.handleZremrangebyscore(args.slice(1));
+        case 'ZREMRANGEBYLEX': return await this.handleZremrangebylex(args.slice(1));
+        case 'ZLEXCOUNT': return await this.handleZlexcount(args.slice(1));
+        case 'ZSCAN': return await this.handleZscan(args.slice(1));
+        case 'ZPOPMAX': return await this.handleZpopmax(args.slice(1));
+        case 'ZPOPMIN': return await this.handleZpopmin(args.slice(1));
+        case 'ZRANDMEMBER': return await this.handleZrandmember(args.slice(1));
+        case 'ZMSCORE': return await this.handleZmscore(args.slice(1));
+        case 'ZRANGESTORE': return await this.handleZrangestore(args.slice(1));
+        case 'ZDIFF': return await this.handleZdiff(args.slice(1));
+        case 'ZDIFFSTORE': return await this.handleZdiffstore(args.slice(1));
+        case 'ZUNION': return await this.handleZunion(args.slice(1));
+        case 'ZUNIONSTORE': return await this.handleZunionstore(args.slice(1));
+        case 'ZINTER': return await this.handleZinter(args.slice(1));
+        case 'ZINTERSTORE': return await this.handleZinterstore(args.slice(1));
+        case 'ZINTERCARD': return await this.handleZintercard(args.slice(1));
+        case 'BZPOPMAX': return await this.handleBzpopmax(args.slice(1));
+        case 'BZPOPMIN': return await this.handleBzpopmin(args.slice(1));
+        case 'BZMPOP': return await this.handleBzmpop(args.slice(1));
+        case 'ZMPOP': return await this.handleZmpop(args.slice(1));
+        default: return encodeError(`unknown command '${args[0]}'`);
+      }
+    } catch (e: any) {
+      if (e.message.startsWith('WRONGTYPE')) {
+        return `-${e.message}\r\n`;
+      }
+      return encodeError(e.message);
+    }
+  }
+
+  // === Server commands ===
+
+  private async handleInfo(args: string[]): Promise<string> {
+    const section = args.length > 0 ? args[0] : undefined;
+    const info = await this.storage.info(section);
+    return encodeBulkString(info);
+  }
+
+  private handleTime(): string {
+    const now = new Date();
+    const unixSec = Math.floor(now.getTime() / 1000).toString();
+    const microSec = (now.getMilliseconds() * 1000).toString();
+    return `*2\r\n${encodeBulkString(unixSec)}${encodeBulkString(microSec)}`;
+  }
+
+  private async handleLastsave(): Promise<string> {
+    const lastSave = await this.storage.getLastSaveTime();
+    return encodeInteger(lastSave);
+  }
+
+  private async handleSave(): Promise<string> {
+    await this.storage.save();
+    return encodeSimpleString('OK');
+  }
+
+  private handleShutdown(): string {
+    return encodeSimpleString('OK');
+  }
+
+  private handleConfig(args: string[]): string {
+    if (args.length === 0) return encodeArray(null);
+    const sub = args[0].toUpperCase();
+    switch (sub) {
+      case 'GET': {
+        if (args.length < 2) return encodeArray(null);
+        const param = args[1].toLowerCase();
+        switch (param) {
+          case 'save': return `*2\r\n${encodeBulkString('save')}${encodeBulkString('60 1000')}`;
+          case 'appendonly': return `*2\r\n${encodeBulkString('appendonly')}${encodeBulkString('no')}`;
+          case 'dbfilename': return `*2\r\n${encodeBulkString('dbfilename')}${encodeBulkString('dump.rdb')}`;
+          case 'dir': return `*2\r\n${encodeBulkString('dir')}${encodeBulkString('./')}`;
+          default: return encodeArray([]);
+        }
+      }
+      case 'SET': {
+        if (args.length < 3) return encodeError('wrong number of arguments for \'CONFIG SET\' command');
+        const param = args[1].toLowerCase();
+        switch (param) {
+          case 'save': return encodeError('CONFIG SET failed');
+          case 'appendonly': case 'dbfilename': return encodeSimpleString('OK');
+          default: return encodeSimpleString('OK');
+        }
+      }
+      default:
+        return encodeError('unknown subcommand');
+    }
+  }
+
+  private handleSlowlog(args: string[]): string {
+    if (args.length === 0) return encodeArray(null);
+    const sub = args[0].toUpperCase();
+    switch (sub) {
+      case 'GET': {
+        let count = 10;
+        if (args.length >= 2) {
+          const c = parseInt(args[1]);
+          if (!isNaN(c)) count = c;
+        }
+        const entries = slowLog.slice(-count);
+        const results: string[] = entries.map(e =>
+          encodeRawArray([encodeInteger(e.timestamp), encodeInteger(e.duration), encodeArray(e.command)])
+        );
+        return encodeRawArray(results);
+      }
+      case 'LEN': return encodeInteger(slowLog.length);
+      case 'RESET': {
+        slowLog.length = 0;
+        return encodeSimpleString('OK');
+      }
+      default: return encodeError('unknown subcommand');
+    }
+  }
+
+  private async handleMemory(args: string[]): Promise<string> {
+    if (args.length === 0) return encodeError('wrong number of arguments for \'MEMORY\' command');
+    const sub = args[0].toUpperCase();
+    switch (sub) {
+      case 'USAGE': {
+        if (args.length < 2) return encodeError('wrong number of arguments for \'memory|usage\' command');
+        const key = args[1];
+        const value = await this.storage.get(key);
+        if (value === null) return encodeInteger(-1);
+        // Estimate: value length + 64 bytes overhead
+        return encodeInteger(value.length + 64);
+      }
+      default:
+        return encodeError('unknown subcommand');
+    }
   }
 
   // === Multi-key ===

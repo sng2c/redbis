@@ -3,6 +3,20 @@ import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 import type { IStorage, StorageConfig } from './interface';
 
+function formatMemoryHuman(bytes: number): string {
+  if (bytes < 1024) return bytes + 'B';
+  if (bytes < 1024 * 1024) {
+    const kb = bytes / 1024;
+    return kb.toFixed(2) + 'K';
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    const mb = bytes / (1024 * 1024);
+    return mb.toFixed(2) + 'M';
+  }
+  const gb = bytes / (1024 * 1024 * 1024);
+  return gb.toFixed(2) + 'G';
+}
+
 function globToRegex(pattern: string): RegExp {
   let regexStr = '^';
   for (let i = 0; i < pattern.length; i++) {
@@ -23,6 +37,8 @@ function globToRegex(pattern: string): RegExp {
 
 export class SqliteStorage implements IStorage {
   private db: Database.Database;
+  private startTime = Date.now();
+  private lastSaveTime: number = 0;
 
   constructor(config: StorageConfig = { path: ':memory:' }) {
     if (config.path !== ':memory:') {
@@ -2852,5 +2868,63 @@ export class SqliteStorage implements IStorage {
 
   async zmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null> {
     return this.bzmpop(numkeys, keys, minmax, count);
+  }
+
+  // === Server / Persistence ===
+
+  async save(): Promise<void> {
+    this.db.pragma('wal_checkpoint(TRUNCATE)');
+    this.lastSaveTime = Math.floor(Date.now() / 1000);
+  }
+
+  async info(section?: string): Promise<string> {
+    const sections: Record<string, string> = {};
+
+    // Server section
+    const uptime = Math.floor((Date.now() - this.startTime) / 1000);
+    sections['server'] =
+      '# Server\r\n' +
+      'redis_version:7.0.0\r\n' +
+      'redis_mode:standalone\r\n' +
+      'os:Linux\r\n' +
+      'tcp_port:6379\r\n' +
+      'uptime_in_seconds:' + uptime + '\r\n';
+
+    // Clients section
+    sections['clients'] =
+      '# Clients\r\n' +
+      'connected_clients:0\r\n';
+
+    // Memory section — estimate using page_count * page_size
+    const pageCount = this.db.pragma('page_count', { simple: true }) as number;
+    const pageSize = this.db.pragma('page_size', { simple: true }) as number;
+    const usedMemory = pageCount * pageSize;
+    const usedMemoryHuman = formatMemoryHuman(usedMemory);
+    sections['memory'] =
+      '# Memory\r\n' +
+      'used_memory:' + usedMemory + '\r\n' +
+      'used_memory_human:' + usedMemoryHuman + '\r\n';
+
+    // Persistence section
+    sections['persistence'] =
+      '# Persistence\r\n' +
+      'loading:0\r\n' +
+      'rdb_last_save_time:' + this.lastSaveTime + '\r\n';
+
+    // Keyspace section
+    const cntRow = this.db.prepare('SELECT COUNT(*) as cnt FROM kv_store').get() as { cnt: number };
+    sections['keyspace'] =
+      '# Keyspace\r\n' +
+      'db0:keys=' + cntRow.cnt + ',expires=0\r\n';
+
+    if (section && section !== 'all') {
+      return sections[section] ?? '';
+    }
+    // Return all sections
+    return sections['server'] + sections['clients'] + sections['memory'] + sections['persistence'] + sections['keyspace'];
+  }
+
+  async getLastSaveTime(): Promise<number> {
+    return this.lastSaveTime;
   }
 }

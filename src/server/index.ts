@@ -1,13 +1,15 @@
 import * as net from 'net';
 import { Config } from '../config';
 import type { IStorage } from '../storage/interface';
+import { PubSubManager } from '../pubsub/manager';
 import { createConnectionHandler } from './connection';
 import { createLogger } from '../logger';
 
 const logger = createLogger('server');
 
 export function createServer(config: Config, storage: IStorage): net.Server {
-  const connectionHandler = createConnectionHandler(storage);
+  const pubsub = new PubSubManager();
+  const connectionHandler = createConnectionHandler(storage, pubsub);
   return net.createServer((socket: net.Socket) => {
     connectionHandler(socket);
   });

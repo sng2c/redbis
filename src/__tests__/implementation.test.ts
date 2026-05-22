@@ -5,6 +5,7 @@ import { CommandHandler } from '../command/handler';
 import { RespParser } from '../protocol/parser';
 import type { IStorage } from '../storage/interface';
 import { createStorage } from '../storage/factory';
+import { PubSubManager } from '../pubsub/manager';
 import { loadConfig, Config } from '../config';
 import {
   encodeSimpleString,
@@ -20,7 +21,7 @@ describe('Integration: SqliteStorage with CommandHandler', () => {
 
   beforeEach(() => {
     storage = new SqliteStorage({ path: ':memory:' });
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   it('SET then GET round-trip', async () => {
@@ -125,7 +126,7 @@ describe('Integration: RESP Parser → CommandHandler → SqliteStorage', () => 
 
   beforeEach(() => {
     storage = new SqliteStorage({ path: ':memory:' });
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
     parser = new RespParser();
   });
 
@@ -185,7 +186,7 @@ describe('Integration: InMemoryStorage with CommandHandler', () => {
 
   beforeEach(() => {
     storage = new InMemoryStorage();
-    handler = new CommandHandler(storage);
+    handler = new CommandHandler(storage, new PubSubManager(), 'test-conn', () => {});
   });
 
   it('SET then GET round-trip', async () => {
