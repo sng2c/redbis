@@ -3,6 +3,24 @@ import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 import type { IStorage, StorageConfig } from './interface';
 
+function globToRegex(pattern: string): RegExp {
+  let regexStr = '^';
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '*') {
+      regexStr += '.*';
+    } else if (ch === '?') {
+      regexStr += '.';
+    } else if ('.+^${}()|[]\\'.includes(ch)) {
+      regexStr += '\\' + ch;
+    } else {
+      regexStr += ch;
+    }
+  }
+  regexStr += '$';
+  return new RegExp(regexStr);
+}
+
 export class SqliteStorage implements IStorage {
   private db: Database.Database;
 
@@ -14,46 +32,546 @@ export class SqliteStorage implements IStorage {
     this.db.prepare(
       'CREATE TABLE IF NOT EXISTS kv_store (key TEXT PRIMARY KEY, value TEXT NOT NULL)'
     ).run();
+    this.migrate();
   }
 
+  private migrate(): void {
+    try {
+      this.db.exec("ALTER TABLE kv_store ADD COLUMN type TEXT DEFAULT 'string'");
+    } catch (e) {
+      // Column already exists — ignore
+    }
+    try {
+      this.db.exec('ALTER TABLE kv_store ADD COLUMN expires_at INTEGER DEFAULT NULL');
+    } catch (e) {
+      // Column already exists — ignore
+    }
+  }
+
+  private evictExpired(key: string): void {
+    this.db.prepare(
+      "DELETE FROM kv_store WHERE key = ? AND expires_at IS NOT NULL AND expires_at <= ?"
+    ).run(key, Date.now());
+  }
+
+  private evictAllExpired(): void {
+    this.db.prepare(
+      "DELETE FROM kv_store WHERE expires_at IS NOT NULL AND expires_at <= ?"
+    ).run(Date.now());
+  }
+
+  // === Existing methods ===
+
   async get(key: string): Promise<string | null> {
+    this.evictExpired(key);
     const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
     return row?.value ?? null;
   }
 
   async set(key: string, value: string): Promise<void> {
-    this.db.prepare('INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)').run(key, value);
+    this.evictExpired(key);
+    this.db.prepare(
+      "INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)"
+    ).run(key, value);
   }
 
   async delete(key: string): Promise<boolean> {
+    this.evictExpired(key);
     const result = this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key);
     return result.changes > 0;
   }
 
   async keys(pattern: string): Promise<string[]> {
-    const likePattern = this.globToLike(pattern);
-    const rows = this.db.prepare("SELECT key FROM kv_store WHERE key LIKE ? ESCAPE '\\'").all(likePattern) as { key: string }[];
-    return rows.map(row => row.key).sort();
+    this.evictAllExpired();
+    const rows = this.db.prepare('SELECT key FROM kv_store').all() as { key: string }[];
+    const regex = globToRegex(pattern);
+    return rows.filter(row => regex.test(row.key)).map(row => row.key).sort();
   }
 
   async flush(): Promise<void> {
     this.db.prepare('DELETE FROM kv_store').run();
   }
 
-  private globToLike(pattern: string): string {
-    let result = '';
-    for (let i = 0; i < pattern.length; i++) {
-      const ch = pattern[i];
-      if (ch === '*') {
-        result += '%';
-      } else if (ch === '?') {
-        result += '_';
-      } else if (ch === '%' || ch === '_' || ch === '\\') {
-        result += '\\' + ch;
-      } else {
-        result += ch;
+  // === Multi-key ===
+
+  async mget(keys: string[]): Promise<(string | null)[]> {
+    if (keys.length === 0) return [];
+    for (const key of keys) this.evictExpired(key);
+    const placeholders = keys.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT key, value FROM kv_store WHERE key IN (${placeholders})`
+    ).all(...keys) as { key: string; value: string }[];
+    const map = new Map(rows.map(r => [r.key, r.value] as [string, string]));
+    return keys.map(k => map.get(k) ?? null);
+  }
+
+  async mset(pairs: Array<{ key: string; value: string }>): Promise<void> {
+    if (pairs.length === 0) return;
+    for (const p of pairs) this.evictExpired(p.key);
+    const stmt = this.db.prepare(
+      "INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)"
+    );
+    const tx = this.db.transaction(() => {
+      for (const p of pairs) stmt.run(p.key, p.value);
+    });
+    tx();
+  }
+
+  async msetnx(pairs: Array<{ key: string; value: string }>): Promise<boolean> {
+    if (pairs.length === 0) return true;
+    for (const p of pairs) this.evictExpired(p.key);
+    const placeholders = pairs.map(p => '?').join(',');
+    const existing = this.db.prepare(
+      `SELECT COUNT(*) as cnt FROM kv_store WHERE key IN (${placeholders})`
+    ).get(...pairs.map(p => p.key)) as { cnt: number };
+    if (existing.cnt > 0) return false;
+    const stmt = this.db.prepare(
+      "INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)"
+    );
+    const tx = this.db.transaction(() => {
+      for (const p of pairs) stmt.run(p.key, p.value);
+    });
+    tx();
+    return true;
+  }
+
+  // === String operations ===
+
+  async append(key: string, value: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) {
+      this.db.prepare(
+        "INSERT INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)"
+      ).run(key, value);
+      return value.length;
+    }
+    const newValue = row.value + value;
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(newValue, key);
+    return newValue.length;
+  }
+
+  async strlen(key: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    return row ? row.value.length : 0;
+  }
+
+  async getrange(key: string, start: number, end: number): Promise<string> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return '';
+    const str = row.value;
+    const len = str.length;
+    let s = start;
+    let e = end;
+    if (s < 0) s = Math.max(len + s, 0);
+    if (e < 0) e = Math.max(len + e, 0);
+    if (s > e || s >= len) return '';
+    return str.substring(s, e + 1);
+  }
+
+  async setrange(key: string, offset: number, value: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; type: string; expires_at: number | null } | undefined;
+
+    let current: string;
+    let existingType: string;
+    let existingExpiresAt: number | null;
+
+    if (!row) {
+      current = '';
+      existingType = 'string';
+      existingExpiresAt = null;
+    } else {
+      current = row.value;
+      existingType = row.type;
+      existingExpiresAt = row.expires_at;
+    }
+
+    // Pad with null bytes if offset > current length
+    if (offset > current.length) {
+      current = current + '\0'.repeat(offset - current.length);
+    }
+
+    // Apply the replacement
+    const before = current.substring(0, offset);
+    const after = current.substring(offset + value.length);
+    const newValue = before + value + after;
+
+    this.db.prepare(
+      'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, ?, ?)'
+    ).run(key, newValue, existingType, existingExpiresAt);
+
+    return newValue.length;
+  }
+
+  async incrby(key: string, delta: number): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+
+    let current: number;
+    let existingExpiresAt: number | null;
+
+    if (!row) {
+      current = 0;
+      existingExpiresAt = null;
+    } else {
+      const parsed = parseInt(row.value, 10);
+      if (isNaN(parsed) || !Number.isInteger(parsed)) {
+        throw new Error('ERR value is not an integer or out of range');
+      }
+      current = parsed;
+      existingExpiresAt = row.expires_at;
+    }
+
+    const result = current + delta;
+    this.db.prepare(
+      'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, \'string\', ?)'
+    ).run(key, String(result), existingExpiresAt);
+
+    return result;
+  }
+
+  async incrbyfloat(key: string, delta: number): Promise<string> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+
+    let current: number;
+    let existingExpiresAt: number | null;
+
+    if (!row) {
+      current = 0;
+      existingExpiresAt = null;
+    } else {
+      const parsed = parseFloat(row.value);
+      if (isNaN(parsed)) {
+        throw new Error('ERR value is not a valid float');
+      }
+      current = parsed;
+      existingExpiresAt = row.expires_at;
+    }
+
+    const result = current + delta;
+    if (isNaN(result)) {
+      throw new Error('ERR value is not a valid float');
+    }
+
+    let resultStr: string;
+    if (Number.isInteger(result) && !delta.toString().includes('.')) {
+      resultStr = String(result);
+    } else {
+      resultStr = parseFloat(result.toPrecision(15)).toString();
+    }
+
+    this.db.prepare(
+      'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, \'string\', ?)'
+    ).run(key, resultStr, existingExpiresAt);
+
+    return resultStr;
+  }
+
+  // === Conditional set ===
+
+  async setnx(key: string, value: string): Promise<boolean> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key);
+    if (row) return false;
+    this.db.prepare(
+      "INSERT INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)"
+    ).run(key, value);
+    return true;
+  }
+
+  async setex(key: string, seconds: number, value: string): Promise<void> {
+    if (seconds <= 0) {
+      throw new Error("ERR invalid expire time in 'SETEX' command");
+    }
+    this.evictExpired(key);
+    const expiresAt = Date.now() + seconds * 1000;
+    this.db.prepare(
+      'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, \'string\', ?)'
+    ).run(key, value, expiresAt);
+  }
+
+  async psetex(key: string, milliseconds: number, value: string): Promise<void> {
+    if (milliseconds <= 0) {
+      throw new Error("ERR invalid expire time in 'PSETEX' command");
+    }
+    this.evictExpired(key);
+    const expiresAt = Date.now() + milliseconds;
+    this.db.prepare(
+      'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, \'string\', ?)'
+    ).run(key, value, expiresAt);
+  }
+
+  async getset(key: string, value: string): Promise<string | null> {
+    this.evictExpired(key);
+    const tx = this.db.transaction(() => {
+      const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+      const oldValue = row?.value ?? null;
+      this.db.prepare(
+        "INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)"
+      ).run(key, value);
+      return oldValue;
+    });
+    return tx();
+  }
+
+  async getdel(key: string): Promise<string | null> {
+    this.evictExpired(key);
+    const tx = this.db.transaction(() => {
+      const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+      if (!row) return null;
+      this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key);
+      return row.value;
+    });
+    return tx();
+  }
+
+  async getex(key: string, options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }): Promise<string | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return null;
+    const value = row.value;
+
+    if (options) {
+      if (options.persist) {
+        this.db.prepare('UPDATE kv_store SET expires_at = NULL WHERE key = ?').run(key);
+      } else if (options.px !== undefined) {
+        this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(Date.now() + options.px, key);
+      } else if (options.ex !== undefined) {
+        this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(Date.now() + options.ex * 1000, key);
+      } else if (options.pxat !== undefined) {
+        this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(options.pxat, key);
+      } else if (options.exat !== undefined) {
+        this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(options.exat * 1000, key);
       }
     }
-    return result;
+
+    return value;
+  }
+
+  // === Key management ===
+
+  async rename(oldKey: string, newKey: string): Promise<void> {
+    this.evictExpired(oldKey);
+    this.evictExpired(newKey);
+
+    if (oldKey === newKey) return;
+
+    const row = this.db.prepare('SELECT value, type, expires_at FROM kv_store WHERE key = ?').get(oldKey) as { value: string; type: string; expires_at: number | null } | undefined;
+    if (!row) {
+      throw new Error('ERR no such key');
+    }
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, ?, ?)'
+      ).run(newKey, row.value, row.type, row.expires_at);
+      this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(oldKey);
+    });
+    tx();
+  }
+
+  async renamenx(oldKey: string, newKey: string): Promise<boolean> {
+    this.evictExpired(oldKey);
+    this.evictExpired(newKey);
+
+    const row = this.db.prepare('SELECT value, type, expires_at FROM kv_store WHERE key = ?').get(oldKey) as { value: string; type: string; expires_at: number | null } | undefined;
+    if (!row) {
+      throw new Error('ERR no such key');
+    }
+
+    if (oldKey === newKey) return true;
+
+    const existing = this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(newKey);
+    if (existing) return false;
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, ?, ?)'
+      ).run(newKey, row.value, row.type, row.expires_at);
+      this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(oldKey);
+    });
+    tx();
+    return true;
+  }
+
+  async type(key: string): Promise<string> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    return row?.type ?? 'none';
+  }
+
+  async dbsize(): Promise<number> {
+    this.evictAllExpired();
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM kv_store').get() as { cnt: number };
+    return row.cnt;
+  }
+
+  async copy(source: string, destination: string): Promise<boolean> {
+    this.evictExpired(source);
+    this.evictExpired(destination);
+
+    if (source === destination) return false;
+
+    const row = this.db.prepare('SELECT value, type, expires_at FROM kv_store WHERE key = ?').get(source) as { value: string; type: string; expires_at: number | null } | undefined;
+    if (!row) return false;
+
+    this.db.prepare(
+      'INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, ?, ?)'
+    ).run(destination, row.value, row.type, row.expires_at);
+
+    return true;
+  }
+
+  async randomkey(): Promise<string | null> {
+    this.evictAllExpired();
+    const row = this.db.prepare('SELECT key FROM kv_store ORDER BY RANDOM() LIMIT 1').get() as { key: string } | undefined;
+    return row?.key ?? null;
+  }
+
+  async unlink(keys: string[]): Promise<number> {
+    if (keys.length === 0) return 0;
+    for (const key of keys) this.evictExpired(key);
+    const placeholders = keys.map(() => '?').join(',');
+    const existing = this.db.prepare(
+      `SELECT COUNT(*) as cnt FROM kv_store WHERE key IN (${placeholders})`
+    ).get(...keys) as { cnt: number };
+    this.db.prepare(
+      `DELETE FROM kv_store WHERE key IN (${placeholders})`
+    ).run(...keys);
+    return existing.cnt;
+  }
+
+  async touch(keys: string[]): Promise<number> {
+    if (keys.length === 0) return 0;
+    for (const key of keys) this.evictExpired(key);
+    const placeholders = keys.map(() => '?').join(',');
+    const row = this.db.prepare(
+      `SELECT COUNT(*) as cnt FROM kv_store WHERE key IN (${placeholders})`
+    ).get(...keys) as { cnt: number };
+    return row.cnt;
+  }
+
+  // === Expiry ===
+
+  async expire(key: string, seconds: number): Promise<boolean> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key);
+    if (!row) return false;
+    this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(Date.now() + seconds * 1000, key);
+    return true;
+  }
+
+  async expireat(key: string, timestamp: number): Promise<boolean> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key);
+    if (!row) return false;
+    this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(timestamp * 1000, key);
+    return true;
+  }
+
+  async pexpire(key: string, milliseconds: number): Promise<boolean> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key);
+    if (!row) return false;
+    this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(Date.now() + milliseconds, key);
+    return true;
+  }
+
+  async pexpireat(key: string, millisecondsTimestamp: number): Promise<boolean> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key);
+    if (!row) return false;
+    this.db.prepare('UPDATE kv_store SET expires_at = ? WHERE key = ?').run(millisecondsTimestamp, key);
+    return true;
+  }
+
+  async ttl(key: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT expires_at FROM kv_store WHERE key = ?').get(key) as { expires_at: number | null } | undefined;
+    if (!row) return -2;
+    if (row.expires_at === null) return -1;
+    const remaining = Math.ceil((row.expires_at - Date.now()) / 1000);
+    if (remaining <= 0) {
+      this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key);
+      return -2;
+    }
+    return remaining;
+  }
+
+  async pttl(key: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT expires_at FROM kv_store WHERE key = ?').get(key) as { expires_at: number | null } | undefined;
+    if (!row) return -2;
+    if (row.expires_at === null) return -1;
+    const remaining = row.expires_at - Date.now();
+    if (remaining <= 0) {
+      this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key);
+      return -2;
+    }
+    return remaining;
+  }
+
+  async persist(key: string): Promise<boolean> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT expires_at FROM kv_store WHERE key = ?').get(key) as { expires_at: number | null } | undefined;
+    if (!row) return false;
+    if (row.expires_at === null) return false;
+    this.db.prepare('UPDATE kv_store SET expires_at = NULL WHERE key = ?').run(key);
+    return true;
+  }
+
+  async expiretime(key: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT expires_at FROM kv_store WHERE key = ?').get(key) as { expires_at: number | null } | undefined;
+    if (!row) return -2;
+    if (row.expires_at === null) return -1;
+    return Math.floor(row.expires_at / 1000);
+  }
+
+  async pexpiretime(key: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT expires_at FROM kv_store WHERE key = ?').get(key) as { expires_at: number | null } | undefined;
+    if (!row) return -2;
+    if (row.expires_at === null) return -1;
+    return row.expires_at;
+  }
+
+  // === SCAN ===
+
+  async scan(cursor: number, pattern?: string, count?: number): Promise<{ cursor: number; keys: string[] }> {
+    this.evictAllExpired();
+
+    const effectiveCount = count ?? 10;
+
+    // Fetch all keys with rowid, ordered by rowid
+    const rows = this.db.prepare(
+      'SELECT key, rowid FROM kv_store WHERE rowid > ? ORDER BY rowid'
+    ).all(cursor) as { key: string; rowid: number }[];
+
+    const regex = pattern ? globToRegex(pattern) : null;
+
+    const matchedKeys: string[] = [];
+    let lastRowId = cursor;
+
+    for (const row of rows) {
+      if (matchedKeys.length >= effectiveCount) break;
+      if (!regex || regex.test(row.key)) {
+        matchedKeys.push(row.key);
+      }
+      lastRowId = row.rowid;
+    }
+
+    // Check if there are more rows beyond what we've processed
+    const remainingRows = this.db.prepare(
+      'SELECT COUNT(*) as cnt FROM kv_store WHERE rowid > ?'
+    ).get(lastRowId) as { cnt: number };
+
+    const nextCursor = remainingRows.cnt > 0 ? lastRowId : 0;
+
+    return { cursor: nextCursor, keys: matchedKeys };
   }
 }
