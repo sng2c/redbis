@@ -54,6 +54,37 @@ export interface IStorage {
 
   // === NEW: SCAN ===
   scan(cursor: number, pattern?: string, count?: number): Promise<{ cursor: number; keys: string[] }>;
+
+  // === Hash operations ===
+  hset(key: string, pairs: Array<{ field: string; value: string }>): Promise<number>;
+  hget(key: string, field: string): Promise<string | null>;
+  hdel(key: string, fields: string[]): Promise<number>;
+  hgetall(key: string): Promise<Array<{ field: string; value: string }>>;
+  hkeys(key: string): Promise<string[]>;
+  hvals(key: string): Promise<string[]>;
+  hlen(key: string): Promise<number>;
+  hexists(key: string, field: string): Promise<boolean>;
+  hsetnx(key: string, field: string, value: string): Promise<boolean>;
+  hmget(key: string, fields: string[]): Promise<(string | null)[]>;
+  hincrby(key: string, field: string, delta: number): Promise<number>;
+  hincrbyfloat(key: string, field: string, delta: number): Promise<string>;
+  hrandfield(key: string, count: number): Promise<string[]>;
+  hscan(cursor: number, key: string, pattern?: string, count?: number): Promise<{ cursor: number; items: Array<{ field: string; value: string }> }>;
+  hstrlen(key: string, field: string): Promise<number>;
+  hgetdel(key: string, fields: string[]): Promise<(string | null)[]>;
+  hgetex(key: string, fields: string[], options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }): Promise<(string | null)[]>;
+  hsetex(key: string, pairs: Array<{ field: string; value: string }>, options?: { ex?: number; px?: number; exat?: number; pxat?: number; keepttl?: boolean }): Promise<number>;
+
+  // Hash field expiry
+  hexpire(key: string, fields: string[], seconds: number): Promise<number[]>;
+  hexpireat(key: string, fields: string[], timestamp: number): Promise<number[]>;
+  hpexpire(key: string, fields: string[], milliseconds: number): Promise<number[]>;
+  hpexpireat(key: string, fields: string[], msTimestamp: number): Promise<number[]>;
+  hexpiretime(key: string, fields: string[]): Promise<number[]>;
+  hpexpiretime(key: string, fields: string[]): Promise<number[]>;
+  hpersist(key: string, fields: string[]): Promise<number[]>;
+  httl(key: string, fields: string[]): Promise<number[]>;
+  hpttl(key: string, fields: string[]): Promise<number[]>;
 }
 
 export interface StorageConfig {

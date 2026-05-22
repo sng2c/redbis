@@ -138,10 +138,43 @@ export class CommandHandler {
         case 'LCS':
           return await this.handleLcs(args.slice(1));
 
+        // Hash operations
+        case 'HSET': return await this.handleHset(args.slice(1));
+        case 'HGET': return await this.handleHget(args.slice(1));
+        case 'HDEL': return await this.handleHdel(args.slice(1));
+        case 'HGETALL': return await this.handleHgetall(args.slice(1));
+        case 'HKEYS': return await this.handleHkeys(args.slice(1));
+        case 'HVALS': return await this.handleHvals(args.slice(1));
+        case 'HLEN': return await this.handleHlen(args.slice(1));
+        case 'HEXISTS': return await this.handleHexists(args.slice(1));
+        case 'HSETNX': return await this.handleHsetnx(args.slice(1));
+        case 'HMSET': return await this.handleHmset(args.slice(1));
+        case 'HMGET': return await this.handleHmget(args.slice(1));
+        case 'HINCRBY': return await this.handleHincrby(args.slice(1));
+        case 'HINCRBYFLOAT': return await this.handleHincrbyfloat(args.slice(1));
+        case 'HRANDFIELD': return await this.handleHrandfield(args.slice(1));
+        case 'HSCAN': return await this.handleHscan(args.slice(1));
+        case 'HSTRLEN': return await this.handleHstrlen(args.slice(1));
+        case 'HGETDEL': return await this.handleHgetdel(args.slice(1));
+        case 'HGETEX': return await this.handleHgetex(args.slice(1));
+        case 'HSETEX': return await this.handleHsetex(args.slice(1));
+        case 'HEXPIRE': return await this.handleHexpire(args.slice(1));
+        case 'HEXPIREAT': return await this.handleHexpireat(args.slice(1));
+        case 'HPEXPIRE': return await this.handleHpexpire(args.slice(1));
+        case 'HPEXPIREAT': return await this.handleHpexpireat(args.slice(1));
+        case 'HEXPIRETIME': return await this.handleHexpiretime(args.slice(1));
+        case 'HPEXPIRETIME': return await this.handleHpexpiretime(args.slice(1));
+        case 'HPERSIST': return await this.handleHpersist(args.slice(1));
+        case 'HTTL': return await this.handleHttl(args.slice(1));
+        case 'HPTTL': return await this.handleHpttl(args.slice(1));
+
         default:
           return encodeError(`unknown command '${args[0]}'`);
       }
     } catch (e: any) {
+      if (e.message.startsWith('WRONGTYPE')) {
+        return `-${e.message}\r\n`;
+      }
       return encodeError(e.message);
     }
   }
@@ -342,6 +375,11 @@ export class CommandHandler {
       'EXPIRE', 'EXPIREAT', 'PEXPIRE', 'PEXPIREAT', 'TTL', 'PTTL', 'PERSIST', 'EXPIRETIME', 'PEXPIRETIME',
       'ECHO', 'QUIT',
       'LCS',
+      'HSET', 'HGET', 'HDEL', 'HGETALL', 'HKEYS', 'HVALS', 'HLEN', 'HEXISTS',
+      'HSETNX', 'HMSET', 'HMGET', 'HINCRBY', 'HINCRBYFLOAT', 'HRANDFIELD', 'HSCAN',
+      'HSTRLEN', 'HGETDEL', 'HGETEX', 'HSETEX',
+      'HEXPIRE', 'HEXPIREAT', 'HPEXPIRE', 'HPEXPIREAT', 'HEXPIRETIME', 'HPEXPIRETIME',
+      'HPERSIST', 'HTTL', 'HPTTL',
     ];
     return encodeArray(commands);
   }
@@ -918,5 +956,506 @@ export class CommandHandler {
     }
 
     return encodeBulkString(result);
+  }
+
+  // === Hash operations ===
+
+  private async handleHset(args: string[]): Promise<string> {
+    if (args.length < 3 || (args.length - 1) % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'HSET' command");
+    }
+    const key = args[0];
+    const pairs: Array<{ field: string; value: string }> = [];
+    for (let i = 1; i < args.length; i += 2) {
+      pairs.push({ field: args[i], value: args[i + 1] });
+    }
+    const result = await this.storage.hset(key, pairs);
+    return encodeInteger(result);
+  }
+
+  private async handleHget(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'HGET' command");
+    }
+    const result = await this.storage.hget(args[0], args[1]);
+    return encodeBulkString(result);
+  }
+
+  private async handleHdel(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HDEL' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hdel(key, fields);
+    return encodeInteger(result);
+  }
+
+  private async handleHgetall(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'HGETALL' command");
+    }
+    const result = await this.storage.hgetall(args[0]);
+    const items: string[] = [];
+    for (const { field, value } of result) {
+      items.push(field, value);
+    }
+    return encodeArray(items);
+  }
+
+  private async handleHkeys(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'HKEYS' command");
+    }
+    const result = await this.storage.hkeys(args[0]);
+    return encodeArray(result);
+  }
+
+  private async handleHvals(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'HVALS' command");
+    }
+    const result = await this.storage.hvals(args[0]);
+    return encodeArray(result);
+  }
+
+  private async handleHlen(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'HLEN' command");
+    }
+    const result = await this.storage.hlen(args[0]);
+    return encodeInteger(result);
+  }
+
+  private async handleHexists(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'HEXISTS' command");
+    }
+    const result = await this.storage.hexists(args[0], args[1]);
+    return encodeInteger(result ? 1 : 0);
+  }
+
+  private async handleHsetnx(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'HSETNX' command");
+    }
+    const result = await this.storage.hsetnx(args[0], args[1], args[2]);
+    return encodeInteger(result ? 1 : 0);
+  }
+
+  private async handleHmset(args: string[]): Promise<string> {
+    if (args.length < 3 || (args.length - 1) % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'HMSET' command");
+    }
+    const key = args[0];
+    const pairs: Array<{ field: string; value: string }> = [];
+    for (let i = 1; i < args.length; i += 2) {
+      pairs.push({ field: args[i], value: args[i + 1] });
+    }
+    await this.storage.hset(key, pairs);
+    return encodeSimpleString('OK');
+  }
+
+  private async handleHmget(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HMGET' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hmget(key, fields);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleHincrby(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'HINCRBY' command");
+    }
+    const delta = parseInt(args[2]);
+    if (isNaN(delta)) {
+      return encodeError('value is not an integer or out of range');
+    }
+    const result = await this.storage.hincrby(args[0], args[1], delta);
+    return encodeInteger(result);
+  }
+
+  private async handleHincrbyfloat(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'HINCRBYFLOAT' command");
+    }
+    const delta = parseFloat(args[2]);
+    if (isNaN(delta)) {
+      return encodeError('value is not a valid float');
+    }
+    const result = await this.storage.hincrbyfloat(args[0], args[1], delta);
+    return encodeBulkString(result);
+  }
+
+  private async handleHrandfield(args: string[]): Promise<string> {
+    if (args.length < 1 || args.length > 3) {
+      return encodeError("wrong number of arguments for 'HRANDFIELD' command");
+    }
+    const key = args[0];
+    let count: number | undefined;
+    let withValues = false;
+
+    if (args.length >= 2) {
+      count = parseInt(args[1]);
+      if (isNaN(count)) {
+        return encodeError('value is not an integer or out of range');
+      }
+    }
+    if (args.length >= 3) {
+      if (args[2].toUpperCase() !== 'WITHVALUES') {
+        return encodeError('ERR syntax error');
+      }
+      withValues = true;
+    }
+
+    if (count === undefined) {
+      const fields = await this.storage.hrandfield(key, 1);
+      if (fields.length === 0) return encodeBulkString(null);
+      return encodeBulkString(fields[0]);
+    }
+
+    const fields = await this.storage.hrandfield(key, count);
+
+    if (!withValues) {
+      return encodeArray(fields);
+    }
+
+    const values = await this.storage.hmget(key, fields);
+    const items: string[] = [];
+    for (let i = 0; i < fields.length; i++) {
+      items.push(fields[i], values[i] ?? '');
+    }
+    return encodeArray(items);
+  }
+
+  private async handleHscan(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HSCAN' command");
+    }
+    const key = args[0];
+    const cursor = parseInt(args[1]);
+    if (isNaN(cursor)) {
+      return encodeError('value is not an integer or out of range');
+    }
+    let pattern: string | undefined;
+    let count: number | undefined;
+    for (let i = 2; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'MATCH') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        pattern = args[i];
+      } else if (opt === 'COUNT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('value is not an integer or out of range');
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+    const result = await this.storage.hscan(cursor, key, pattern, count);
+    const cursorStr = encodeBulkString(String(result.cursor));
+    const items: string[] = [];
+    for (const { field, value } of result.items) {
+      items.push(field, value);
+    }
+    const itemsArr = encodeArray(items);
+    return `*2\r\n${cursorStr}${itemsArr}`;
+  }
+
+  private async handleHstrlen(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'HSTRLEN' command");
+    }
+    const result = await this.storage.hstrlen(args[0], args[1]);
+    return encodeInteger(result);
+  }
+
+  private async handleHgetdel(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HGETDEL' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hgetdel(key, fields);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleHgetex(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HGETEX' command");
+    }
+    const key = args[0];
+    const fields: string[] = [];
+    const options: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean } = {};
+    let parsingFields = true;
+
+    for (let i = 1; i < args.length; i++) {
+      const upper = args[i].toUpperCase();
+      if (parsingFields && (upper === 'EX' || upper === 'PX' || upper === 'EXAT' || upper === 'PXAT' || upper === 'PERSIST')) {
+        parsingFields = false;
+      }
+      if (parsingFields) {
+        fields.push(args[i]);
+        continue;
+      }
+      switch (upper) {
+        case 'EX': {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          options.ex = parseInt(args[i]);
+          if (isNaN(options.ex)) return encodeError('value is not an integer or out of range');
+          break;
+        }
+        case 'PX': {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          options.px = parseInt(args[i]);
+          if (isNaN(options.px)) return encodeError('value is not an integer or out of range');
+          break;
+        }
+        case 'EXAT': {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          options.exat = parseInt(args[i]);
+          if (isNaN(options.exat)) return encodeError('value is not an integer or out of range');
+          break;
+        }
+        case 'PXAT': {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          options.pxat = parseInt(args[i]);
+          if (isNaN(options.pxat)) return encodeError('value is not an integer or out of range');
+          break;
+        }
+        case 'PERSIST': {
+          options.persist = true;
+          break;
+        }
+        default:
+          return encodeError('ERR syntax error');
+      }
+    }
+
+    if (fields.length === 0) {
+      return encodeError("wrong number of arguments for 'HGETEX' command");
+    }
+
+    const hasOpts = options.ex !== undefined || options.px !== undefined ||
+                    options.exat !== undefined || options.pxat !== undefined ||
+                    options.persist !== undefined;
+    const result = await this.storage.hgetex(key, fields, hasOpts ? options : undefined);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleHsetex(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'HSETEX' command");
+    }
+    const key = args[0];
+    const options: { ex?: number; px?: number; exat?: number; pxat?: number; keepttl?: boolean } = {};
+    const pairs: Array<{ field: string; value: string }> = [];
+    let i = 1;
+
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      let consumed = false;
+      switch (opt) {
+        case 'EX': {
+          if (i + 1 >= args.length) return encodeError('ERR syntax error');
+          const val = parseInt(args[i + 1]);
+          if (isNaN(val)) return encodeError('value is not an integer or out of range');
+          options.ex = val;
+          i += 2;
+          consumed = true;
+          break;
+        }
+        case 'PX': {
+          if (i + 1 >= args.length) return encodeError('ERR syntax error');
+          const val = parseInt(args[i + 1]);
+          if (isNaN(val)) return encodeError('value is not an integer or out of range');
+          options.px = val;
+          i += 2;
+          consumed = true;
+          break;
+        }
+        case 'EXAT': {
+          if (i + 1 >= args.length) return encodeError('ERR syntax error');
+          const val = parseInt(args[i + 1]);
+          if (isNaN(val)) return encodeError('value is not an integer or out of range');
+          options.exat = val;
+          i += 2;
+          consumed = true;
+          break;
+        }
+        case 'PXAT': {
+          if (i + 1 >= args.length) return encodeError('ERR syntax error');
+          const val = parseInt(args[i + 1]);
+          if (isNaN(val)) return encodeError('value is not an integer or out of range');
+          options.pxat = val;
+          i += 2;
+          consumed = true;
+          break;
+        }
+        case 'KEEPTTL': {
+          options.keepttl = true;
+          i++;
+          consumed = true;
+          break;
+        }
+      }
+      if (!consumed) break;
+    }
+
+    const remaining = args.length - i;
+    if (remaining < 2 || remaining % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'HSETEX' command");
+    }
+    for (let j = i; j < args.length; j += 2) {
+      pairs.push({ field: args[j], value: args[j + 1] });
+    }
+
+    const hasOptions = options.ex !== undefined || options.px !== undefined ||
+                       options.exat !== undefined || options.pxat !== undefined ||
+                       options.keepttl !== undefined;
+    const result = await this.storage.hsetex(key, pairs, hasOptions ? options : undefined);
+    return encodeInteger(result);
+  }
+
+  private async handleHexpire(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'HEXPIRE' command");
+    }
+    const key = args[0];
+    const seconds = parseInt(args[1]);
+    if (isNaN(seconds)) {
+      return encodeError('value is not an integer or out of range');
+    }
+    if (args[2].toUpperCase() !== 'FIELDS') {
+      return encodeError('ERR syntax error');
+    }
+    const fields = args.slice(3);
+    if (fields.length === 0) {
+      return encodeError("wrong number of arguments for 'HEXPIRE' command");
+    }
+    const result = await this.storage.hexpire(key, fields, seconds);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHexpireat(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'HEXPIREAT' command");
+    }
+    const key = args[0];
+    const timestamp = parseInt(args[1]);
+    if (isNaN(timestamp)) {
+      return encodeError('value is not an integer or out of range');
+    }
+    if (args[2].toUpperCase() !== 'FIELDS') {
+      return encodeError('ERR syntax error');
+    }
+    const fields = args.slice(3);
+    if (fields.length === 0) {
+      return encodeError("wrong number of arguments for 'HEXPIREAT' command");
+    }
+    const result = await this.storage.hexpireat(key, fields, timestamp);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHpexpire(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'HPEXPIRE' command");
+    }
+    const key = args[0];
+    const milliseconds = parseInt(args[1]);
+    if (isNaN(milliseconds)) {
+      return encodeError('value is not an integer or out of range');
+    }
+    if (args[2].toUpperCase() !== 'FIELDS') {
+      return encodeError('ERR syntax error');
+    }
+    const fields = args.slice(3);
+    if (fields.length === 0) {
+      return encodeError("wrong number of arguments for 'HPEXPIRE' command");
+    }
+    const result = await this.storage.hpexpire(key, fields, milliseconds);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHpexpireat(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'HPEXPIREAT' command");
+    }
+    const key = args[0];
+    const msTimestamp = parseInt(args[1]);
+    if (isNaN(msTimestamp)) {
+      return encodeError('value is not an integer or out of range');
+    }
+    if (args[2].toUpperCase() !== 'FIELDS') {
+      return encodeError('ERR syntax error');
+    }
+    const fields = args.slice(3);
+    if (fields.length === 0) {
+      return encodeError("wrong number of arguments for 'HPEXPIREAT' command");
+    }
+    const result = await this.storage.hpexpireat(key, fields, msTimestamp);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHexpiretime(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HEXPIRETIME' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hexpiretime(key, fields);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHpexpiretime(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HPEXPIRETIME' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hpexpiretime(key, fields);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHpersist(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HPERSIST' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hpersist(key, fields);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHttl(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HTTL' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.httl(key, fields);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  private async handleHpttl(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'HPTTL' command");
+    }
+    const key = args[0];
+    const fields = args.slice(1);
+    const result = await this.storage.hpttl(key, fields);
+    return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
   }
 }
