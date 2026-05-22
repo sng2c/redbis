@@ -168,6 +168,29 @@ export class CommandHandler {
         case 'HTTL': return await this.handleHttl(args.slice(1));
         case 'HPTTL': return await this.handleHpttl(args.slice(1));
 
+        // List operations
+        case 'LPUSH': return await this.handleLpush(args.slice(1));
+        case 'RPUSH': return await this.handleRpush(args.slice(1));
+        case 'LPOP': return await this.handleLpop(args.slice(1));
+        case 'RPOP': return await this.handleRpop(args.slice(1));
+        case 'LLEN': return await this.handleLlen(args.slice(1));
+        case 'LRANGE': return await this.handleLrange(args.slice(1));
+        case 'LINDEX': return await this.handleLindex(args.slice(1));
+        case 'LSET': return await this.handleLset(args.slice(1));
+        case 'LREM': return await this.handleLrem(args.slice(1));
+        case 'LTRIM': return await this.handleLtrim(args.slice(1));
+        case 'LPOS': return await this.handleLpos(args.slice(1));
+        case 'RPOPLPUSH': return await this.handleRpoplpush(args.slice(1));
+        case 'LPUSHX': return await this.handleLpushx(args.slice(1));
+        case 'RPUSHX': return await this.handleRpushx(args.slice(1));
+        case 'LINSERT': return await this.handleLinsert(args.slice(1));
+        case 'LMOVE': return await this.handleLmove(args.slice(1));
+        case 'BLPOP': return await this.handleBlpop(args.slice(1));
+        case 'BRPOP': return await this.handleBrpop(args.slice(1));
+        case 'BRPOPLPUSH': return await this.handleBrpoplpush(args.slice(1));
+        case 'BLMOVE': return await this.handleBlmove(args.slice(1));
+        case 'LMPOP': return await this.handleLmpop(args.slice(1));
+
         default:
           return encodeError(`unknown command '${args[0]}'`);
       }
@@ -380,6 +403,9 @@ export class CommandHandler {
       'HSTRLEN', 'HGETDEL', 'HGETEX', 'HSETEX',
       'HEXPIRE', 'HEXPIREAT', 'HPEXPIRE', 'HPEXPIREAT', 'HEXPIRETIME', 'HPEXPIRETIME',
       'HPERSIST', 'HTTL', 'HPTTL',
+      'LPUSH', 'RPUSH', 'LPOP', 'RPOP', 'LLEN', 'LRANGE', 'LINDEX',
+      'LSET', 'LREM', 'LTRIM', 'LPOS', 'RPOPLPUSH', 'LPUSHX', 'RPUSHX',
+      'LINSERT', 'LMOVE', 'BLPOP', 'BRPOP', 'BRPOPLPUSH', 'BLMOVE', 'LMPOP',
     ];
     return encodeArray(commands);
   }
@@ -1457,5 +1483,320 @@ export class CommandHandler {
     const fields = args.slice(1);
     const result = await this.storage.hpttl(key, fields);
     return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  }
+
+  // === List operations ===
+
+  private async handleLpush(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'LPUSH' command");
+    }
+    const key = args[0];
+    const elements = args.slice(1);
+    const result = await this.storage.lpush(key, elements);
+    return encodeInteger(result);
+  }
+
+  private async handleRpush(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'RPUSH' command");
+    }
+    const key = args[0];
+    const elements = args.slice(1);
+    const result = await this.storage.rpush(key, elements);
+    return encodeInteger(result);
+  }
+
+  private async handleLpop(args: string[]): Promise<string> {
+    if (args.length < 1 || args.length > 2) {
+      return encodeError("wrong number of arguments for 'LPOP' command");
+    }
+    const key = args[0];
+    if (args.length === 2) {
+      const count = parseInt(args[1]);
+      if (isNaN(count) || count < 0) {
+        return encodeError('ERR value is not an integer or out of range');
+      }
+      if (count === 0) return encodeArray([]);
+      const result = await this.storage.lpop(key, count);
+      if (result === null) return encodeArray(null);
+      return encodeArray(result as string[]);
+    }
+    const result = await this.storage.lpop(key);
+    if (result === null) return encodeBulkString(null);
+    return encodeBulkString(result as string);
+  }
+
+  private async handleRpop(args: string[]): Promise<string> {
+    if (args.length < 1 || args.length > 2) {
+      return encodeError("wrong number of arguments for 'RPOP' command");
+    }
+    const key = args[0];
+    if (args.length === 2) {
+      const count = parseInt(args[1]);
+      if (isNaN(count) || count < 0) {
+        return encodeError('ERR value is not an integer or out of range');
+      }
+      if (count === 0) return encodeArray([]);
+      const result = await this.storage.rpop(key, count);
+      if (result === null) return encodeArray(null);
+      return encodeArray(result as string[]);
+    }
+    const result = await this.storage.rpop(key);
+    if (result === null) return encodeBulkString(null);
+    return encodeBulkString(result as string);
+  }
+
+  private async handleLlen(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'LLEN' command");
+    }
+    const result = await this.storage.llen(args[0]);
+    return encodeInteger(result);
+  }
+
+  private async handleLrange(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'LRANGE' command");
+    }
+    const start = parseInt(args[1]);
+    const stop = parseInt(args[2]);
+    if (isNaN(start) || isNaN(stop)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.lrange(args[0], start, stop);
+    return encodeArray(result);
+  }
+
+  private async handleLindex(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'LINDEX' command");
+    }
+    const index = parseInt(args[1]);
+    if (isNaN(index)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.lindex(args[0], index);
+    return encodeBulkString(result);
+  }
+
+  private async handleLset(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'LSET' command");
+    }
+    const index = parseInt(args[1]);
+    if (isNaN(index)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    await this.storage.lset(args[0], index, args[2]);
+    return encodeSimpleString('OK');
+  }
+
+  private async handleLrem(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'LREM' command");
+    }
+    const count = parseInt(args[1]);
+    if (isNaN(count)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.lrem(args[0], count, args[2]);
+    return encodeInteger(result);
+  }
+
+  private async handleLtrim(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'LTRIM' command");
+    }
+    const start = parseInt(args[1]);
+    const stop = parseInt(args[2]);
+    if (isNaN(start) || isNaN(stop)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    await this.storage.ltrim(args[0], start, stop);
+    return encodeSimpleString('OK');
+  }
+
+  private async handleLpos(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'LPOS' command");
+    }
+    const key = args[0];
+    const element = args[1];
+    let rank: number | undefined;
+    let maxlen: number | undefined;
+
+    for (let i = 2; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'RANK') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        rank = parseInt(args[i]);
+        if (isNaN(rank) || rank === 0) return encodeError('ERR value is not an integer or out of range');
+      } else if (opt === 'MAXLEN') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        maxlen = parseInt(args[i]);
+        if (isNaN(maxlen) || maxlen <= 0) return encodeError('ERR value is not an integer or out of range');
+      } else if (opt === 'FIRST') {
+        if (rank === undefined) rank = 1;
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+
+    const options: { rank?: number; maxlen?: number } = {};
+    if (rank !== undefined) options.rank = rank;
+    if (maxlen !== undefined) options.maxlen = maxlen;
+
+    const result = await this.storage.lpos(key, element, options);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleRpoplpush(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'RPOPLPUSH' command");
+    }
+    const result = await this.storage.rpoplpush(args[0], args[1]);
+    return encodeBulkString(result);
+  }
+
+  private async handleLpushx(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'LPUSHX' command");
+    }
+    const result = await this.storage.lpushx(args[0], args[1]);
+    return encodeInteger(result);
+  }
+
+  private async handleRpushx(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'RPUSHX' command");
+    }
+    const result = await this.storage.rpushx(args[0], args[1]);
+    return encodeInteger(result);
+  }
+
+  private async handleLinsert(args: string[]): Promise<string> {
+    if (args.length !== 4) {
+      return encodeError("wrong number of arguments for 'LINSERT' command");
+    }
+    const position = args[1].toUpperCase();
+    if (position !== 'BEFORE' && position !== 'AFTER') {
+      return encodeError('ERR syntax error');
+    }
+    const result = await this.storage.linsert(args[0], position as 'BEFORE' | 'AFTER', args[2], args[3]);
+    return encodeInteger(result);
+  }
+
+  private async handleLmove(args: string[]): Promise<string> {
+    if (args.length !== 4) {
+      return encodeError("wrong number of arguments for 'LMOVE' command");
+    }
+    const srcDir = args[2].toUpperCase();
+    const destDir = args[3].toUpperCase();
+    if ((srcDir !== 'LEFT' && srcDir !== 'RIGHT') || (destDir !== 'LEFT' && destDir !== 'RIGHT')) {
+      return encodeError('ERR syntax error');
+    }
+    const result = await this.storage.lmove(args[0], args[1], srcDir as 'LEFT' | 'RIGHT', destDir as 'LEFT' | 'RIGHT');
+    return encodeBulkString(result);
+  }
+
+  private async handleBlpop(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'BLPOP' command");
+    }
+    const timeout = parseFloat(args[args.length - 1]);
+    if (isNaN(timeout)) {
+      return encodeError('ERR timeout is not a float or out of range');
+    }
+    const keys = args.slice(0, -1);
+    const result = await this.storage.blpop(keys, timeout);
+    if (result === null) return encodeArray(null);
+    return encodeArray([result.key, result.element]);
+  }
+
+  private async handleBrpop(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'BRPOP' command");
+    }
+    const timeout = parseFloat(args[args.length - 1]);
+    if (isNaN(timeout)) {
+      return encodeError('ERR timeout is not a float or out of range');
+    }
+    const keys = args.slice(0, -1);
+    const result = await this.storage.brpop(keys, timeout);
+    if (result === null) return encodeArray(null);
+    return encodeArray([result.key, result.element]);
+  }
+
+  private async handleBrpoplpush(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'BRPOPLPUSH' command");
+    }
+    const timeout = parseFloat(args[2]);
+    if (isNaN(timeout)) {
+      return encodeError('ERR timeout is not a float or out of range');
+    }
+    const result = await this.storage.brpoplpush(args[0], args[1], timeout);
+    return encodeBulkString(result);
+  }
+
+  private async handleBlmove(args: string[]): Promise<string> {
+    if (args.length !== 5) {
+      return encodeError("wrong number of arguments for 'BLMOVE' command");
+    }
+    const srcDir = args[2].toUpperCase();
+    const destDir = args[3].toUpperCase();
+    if ((srcDir !== 'LEFT' && srcDir !== 'RIGHT') || (destDir !== 'LEFT' && destDir !== 'RIGHT')) {
+      return encodeError('ERR syntax error');
+    }
+    const timeout = parseFloat(args[4]);
+    if (isNaN(timeout)) {
+      return encodeError('ERR timeout is not a float or out of range');
+    }
+    const result = await this.storage.blmove(args[0], args[1], srcDir as 'LEFT' | 'RIGHT', destDir as 'LEFT' | 'RIGHT', timeout);
+    return encodeBulkString(result);
+  }
+
+  private async handleLmpop(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'LMPOP' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys + 1) {
+      return encodeError("wrong number of arguments for 'LMPOP' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let dir: 'LEFT' | 'RIGHT' | undefined;
+    let count: number | undefined;
+
+    for (let i = 1 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'LEFT' || opt === 'RIGHT') {
+        dir = opt as 'LEFT' | 'RIGHT';
+      } else if (opt === 'COUNT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count) || count <= 0) return encodeError('ERR value is not an integer or out of range');
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+
+    if (!dir) {
+      return encodeError('ERR syntax error');
+    }
+
+    const result = await this.storage.lmpop(numkeys, keys, dir, count);
+    if (result === null) return encodeArray(null);
+    const keyEncoded = encodeBulkString(result.key);
+    const elementsEncoded = encodeArray(result.elements);
+    return `*2\r\n${keyEncoded}${elementsEncoded}`;
   }
 }

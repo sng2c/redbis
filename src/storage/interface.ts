@@ -85,6 +85,29 @@ export interface IStorage {
   hpersist(key: string, fields: string[]): Promise<number[]>;
   httl(key: string, fields: string[]): Promise<number[]>;
   hpttl(key: string, fields: string[]): Promise<number[]>;
+
+  // === List operations ===
+  lpush(key: string, elements: string[]): Promise<number>;
+  rpush(key: string, elements: string[]): Promise<number>;
+  lpop(key: string, count?: number): Promise<string | string[] | null>;
+  rpop(key: string, count?: number): Promise<string | string[] | null>;
+  llen(key: string): Promise<number>;
+  lrange(key: string, start: number, stop: number): Promise<string[]>;
+  lindex(key: string, index: number): Promise<string | null>;
+  lset(key: string, index: number, element: string): Promise<void>;
+  lrem(key: string, count: number, element: string): Promise<number>;
+  ltrim(key: string, start: number, stop: number): Promise<void>;
+  lpos(key: string, element: string, options?: { rank?: number; maxlen?: number }): Promise<number | null>;
+  rpoplpush(source: string, destination: string): Promise<string | null>;
+  lpushx(key: string, element: string): Promise<number>;
+  rpushx(key: string, element: string): Promise<number>;
+  linsert(key: string, position: 'BEFORE' | 'AFTER', pivot: string, element: string): Promise<number>;
+  lmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destDir: 'LEFT' | 'RIGHT'): Promise<string | null>;
+  blpop(keys: string[], timeout: number): Promise<{ key: string; element: string } | null>;
+  brpop(keys: string[], timeout: number): Promise<{ key: string; element: string } | null>;
+  brpoplpush(source: string, destination: string, timeout: number): Promise<string | null>;
+  blmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destDir: 'LEFT' | 'RIGHT', timeout: number): Promise<string | null>;
+  lmpop(numkeys: number, keys: string[], dir: 'LEFT' | 'RIGHT', count?: number): Promise<{ key: string; elements: string[] } | null>;
 }
 
 export interface StorageConfig {
