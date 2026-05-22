@@ -52,6 +52,9 @@ export class SqliteStorage implements IStorage {
     this.db.prepare(
       'CREATE TABLE IF NOT EXISTS list_store (key TEXT NOT NULL, seq REAL NOT NULL, value TEXT NOT NULL, PRIMARY KEY (key, seq))'
     ).run();
+    this.db.prepare(
+      'CREATE TABLE IF NOT EXISTS set_store (key TEXT NOT NULL, member TEXT NOT NULL, PRIMARY KEY (key, member))'
+    ).run();
   }
 
   private evictExpired(key: string): void {
@@ -61,6 +64,7 @@ export class SqliteStorage implements IStorage {
     if (result.changes > 0) {
       this.db.prepare('DELETE FROM hash_store WHERE key = ?').run(key);
       this.db.prepare('DELETE FROM list_store WHERE key = ?').run(key);
+      this.db.prepare('DELETE FROM set_store WHERE key = ?').run(key);
     }
   }
 
@@ -70,6 +74,9 @@ export class SqliteStorage implements IStorage {
     ).run(Date.now());
     this.db.prepare(
       "DELETE FROM list_store WHERE key IN (SELECT key FROM kv_store WHERE expires_at IS NOT NULL AND expires_at <= ?)"
+    ).run(Date.now());
+    this.db.prepare(
+      "DELETE FROM set_store WHERE key IN (SELECT key FROM kv_store WHERE expires_at IS NOT NULL AND expires_at <= ?)"
     ).run(Date.now());
     this.db.prepare(
       "DELETE FROM kv_store WHERE expires_at IS NOT NULL AND expires_at <= ?"
@@ -96,6 +103,7 @@ export class SqliteStorage implements IStorage {
     const result = this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key);
     this.db.prepare('DELETE FROM hash_store WHERE key = ?').run(key);
     this.db.prepare('DELETE FROM list_store WHERE key = ?').run(key);
+    this.db.prepare('DELETE FROM set_store WHERE key = ?').run(key);
     return result.changes > 0;
   }
 
@@ -110,6 +118,7 @@ export class SqliteStorage implements IStorage {
     this.db.prepare('DELETE FROM kv_store').run();
     this.db.prepare('DELETE FROM hash_store').run();
     this.db.prepare('DELETE FROM list_store').run();
+    this.db.prepare('DELETE FROM set_store').run();
   }
 
   // === Multi-key ===
@@ -392,6 +401,7 @@ export class SqliteStorage implements IStorage {
       this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(oldKey);
       this.db.prepare('UPDATE hash_store SET key = ? WHERE key = ?').run(newKey, oldKey);
       this.db.prepare('UPDATE list_store SET key = ? WHERE key = ?').run(newKey, oldKey);
+      this.db.prepare('UPDATE set_store SET key = ? WHERE key = ?').run(newKey, oldKey);
     });
     tx();
   }
@@ -455,6 +465,11 @@ export class SqliteStorage implements IStorage {
         'INSERT OR REPLACE INTO list_store (key, seq, value) SELECT ?, seq, value FROM list_store WHERE key = ?'
       ).run(destination, source);
     }
+    if (row.type === 'set') {
+      this.db.prepare(
+        'INSERT OR REPLACE INTO set_store (key, member) SELECT ?, member FROM set_store WHERE key = ?'
+      ).run(destination, source);
+    }
 
     return true;
   }
@@ -480,6 +495,9 @@ export class SqliteStorage implements IStorage {
     ).run(...keys);
     this.db.prepare(
       `DELETE FROM list_store WHERE key IN (${placeholders})`
+    ).run(...keys);
+    this.db.prepare(
+      `DELETE FROM set_store WHERE key IN (${placeholders})`
     ).run(...keys);
     return existing.cnt;
   }
@@ -1706,5 +1724,378 @@ export class SqliteStorage implements IStorage {
       if (result) return result;
     }
     return null;
+  }
+
+  // === Set helpers ===
+
+  private ensureSetTypeOrThrow(key: string): void {
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (row && row.type !== 'set') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+  }
+
+  private ensureSetKvStoreEntry(key: string): void {
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (row && row.type !== 'set') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    if (!row) {
+      this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'set', NULL)").run(key);
+    }
+  }
+
+  private cleanupSetIfEmpty(key: string): void {
+    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (!typeRow || typeRow.type !== 'set') return;
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM set_store WHERE key = ?').get(key) as { cnt: number };
+    if (row.cnt === 0) {
+      this.db.prepare('DELETE FROM set_store WHERE key = ?').run(key);
+      this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key);
+    }
+  }
+
+  // === Set operations ===
+
+  async sadd(key: string, members: string[]): Promise<number> {
+    this.evictExpired(key);
+    const tx = this.db.transaction(() => {
+      this.ensureSetKvStoreEntry(key);
+      let added = 0;
+      const insertStmt = this.db.prepare('INSERT OR IGNORE INTO set_store (key, member) VALUES (?, ?)');
+      for (const member of members) {
+        const result = insertStmt.run(key, member);
+        added += result.changes;
+      }
+      return added;
+    });
+    return tx();
+  }
+
+  async srem(key: string, members: string[]): Promise<number> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const tx = this.db.transaction(() => {
+      let removed = 0;
+      const deleteStmt = this.db.prepare('DELETE FROM set_store WHERE key = ? AND member = ?');
+      for (const member of members) {
+        const result = deleteStmt.run(key, member);
+        removed += result.changes;
+      }
+      this.cleanupSetIfEmpty(key);
+      return removed;
+    });
+    return tx();
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(key) as { member: string }[];
+    return rows.map(r => r.member);
+  }
+
+  async scard(key: string): Promise<number> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM set_store WHERE key = ?').get(key) as { cnt: number };
+    return row.cnt;
+  }
+
+  async sismember(key: string, member: string): Promise<boolean> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const row = this.db.prepare('SELECT 1 FROM set_store WHERE key = ? AND member = ? LIMIT 1').get(key, member);
+    return !!row;
+  }
+
+  async smismember(key: string, members: string[]): Promise<boolean[]> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    if (members.length === 0) return [];
+    const placeholders = members.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT member FROM set_store WHERE key = ? AND member IN (${placeholders})`
+    ).all(key, ...members) as { member: string }[];
+    const found = new Set(rows.map(r => r.member));
+    return members.map(m => found.has(m));
+  }
+
+  async srandmember(key: string, count?: number): Promise<string[]> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(key) as { member: string }[];
+    if (rows.length === 0) return [];
+    const arr = rows.map(r => r.member);
+    const effectiveCount = count ?? 1;
+    if (effectiveCount >= 0) {
+      if (effectiveCount >= arr.length) {
+        const shuffled = [...arr];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+      }
+      const shuffled = [...arr];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled.slice(0, effectiveCount);
+    } else {
+      const absCount = Math.abs(effectiveCount);
+      const result: string[] = [];
+      for (let i = 0; i < absCount; i++) {
+        result.push(arr[Math.floor(Math.random() * arr.length)]);
+      }
+      return result;
+    }
+  }
+
+  async spop(key: string, count?: number): Promise<string[]> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const tx = this.db.transaction(() => {
+      const actualCount = count ?? 1;
+      const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ? ORDER BY RANDOM() LIMIT ?').all(key, actualCount) as { member: string }[];
+      if (rows.length === 0) return [];
+      const deleteStmt = this.db.prepare('DELETE FROM set_store WHERE key = ? AND member = ?');
+      for (const row of rows) {
+        deleteStmt.run(key, row.member);
+      }
+      this.cleanupSetIfEmpty(key);
+      return rows.map(r => r.member);
+    });
+    return tx();
+  }
+
+  async smove(source: string, destination: string, member: string): Promise<boolean> {
+    this.evictExpired(source);
+    this.evictExpired(destination);
+    this.ensureSetTypeOrThrow(source);
+    this.ensureSetTypeOrThrow(destination);
+    const tx = this.db.transaction(() => {
+      const row = this.db.prepare('SELECT 1 FROM set_store WHERE key = ? AND member = ?').get(source, member);
+      if (!row) return false;
+      this.db.prepare('DELETE FROM set_store WHERE key = ? AND member = ?').run(source, member);
+      if (source !== destination) {
+        this.ensureSetKvStoreEntry(destination);
+        this.db.prepare('INSERT OR IGNORE INTO set_store (key, member) VALUES (?, ?)').run(destination, member);
+      } else {
+        this.db.prepare('INSERT OR IGNORE INTO set_store (key, member) VALUES (?, ?)').run(source, member);
+      }
+      this.cleanupSetIfEmpty(source);
+      return true;
+    });
+    return tx();
+  }
+
+  async sdiff(keys: string[]): Promise<string[]> {
+    for (const key of keys) this.evictExpired(key);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    if (keys.length === 0) return [];
+    const firstRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[0]) as { member: string }[];
+    if (firstRows.length === 0) return [];
+    const firstMembers = new Set(firstRows.map(r => r.member));
+    for (let i = 1; i < keys.length; i++) {
+      const otherRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[i]) as { member: string }[];
+      for (const row of otherRows) {
+        firstMembers.delete(row.member);
+      }
+    }
+    return Array.from(firstMembers);
+  }
+
+  async sinter(keys: string[]): Promise<string[]> {
+    for (const key of keys) this.evictExpired(key);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    if (keys.length === 0) return [];
+    const firstRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[0]) as { member: string }[];
+    if (firstRows.length === 0) return [];
+    let result = new Set(firstRows.map(r => r.member));
+    for (let i = 1; i < keys.length; i++) {
+      const otherRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[i]) as { member: string }[];
+      if (otherRows.length === 0) return [];
+      const otherSet = new Set(otherRows.map(r => r.member));
+      const next = new Set<string>();
+      for (const member of result) {
+        if (otherSet.has(member)) next.add(member);
+      }
+      result = next;
+      if (result.size === 0) return [];
+    }
+    return Array.from(result);
+  }
+
+  async sunion(keys: string[]): Promise<string[]> {
+    for (const key of keys) this.evictExpired(key);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    if (keys.length === 0) return [];
+    const result = new Set<string>();
+    for (const key of keys) {
+      const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(key) as { member: string }[];
+      for (const row of rows) {
+        result.add(row.member);
+      }
+    }
+    return Array.from(result);
+  }
+
+  async sdiffstore(destination: string, keys: string[]): Promise<number> {
+    this.evictExpired(destination);
+    for (const key of keys) this.evictExpired(key);
+    this.ensureSetTypeOrThrow(destination);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    const tx = this.db.transaction(() => {
+      const diff = this._computeSetDiff(keys);
+      if (diff.length === 0) {
+        const destRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(destination) as { type: string } | undefined;
+        if (destRow && destRow.type === 'set') {
+          this.db.prepare('DELETE FROM set_store WHERE key = ?').run(destination);
+          this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(destination);
+        }
+        return 0;
+      }
+      this.ensureSetKvStoreEntry(destination);
+      this.db.prepare('DELETE FROM set_store WHERE key = ?').run(destination);
+      const insertStmt = this.db.prepare('INSERT OR IGNORE INTO set_store (key, member) VALUES (?, ?)');
+      for (const member of diff) {
+        insertStmt.run(destination, member);
+      }
+      return diff.length;
+    });
+    return tx();
+  }
+
+  async sinterstore(destination: string, keys: string[]): Promise<number> {
+    this.evictExpired(destination);
+    for (const key of keys) this.evictExpired(key);
+    this.ensureSetTypeOrThrow(destination);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    const tx = this.db.transaction(() => {
+      const inter = this._computeSetInter(keys);
+      if (inter.length === 0) {
+        const destRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(destination) as { type: string } | undefined;
+        if (destRow && destRow.type === 'set') {
+          this.db.prepare('DELETE FROM set_store WHERE key = ?').run(destination);
+          this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(destination);
+        }
+        return 0;
+      }
+      this.ensureSetKvStoreEntry(destination);
+      this.db.prepare('DELETE FROM set_store WHERE key = ?').run(destination);
+      const insertStmt = this.db.prepare('INSERT OR IGNORE INTO set_store (key, member) VALUES (?, ?)');
+      for (const member of inter) {
+        insertStmt.run(destination, member);
+      }
+      return inter.length;
+    });
+    return tx();
+  }
+
+  async sunionstore(destination: string, keys: string[]): Promise<number> {
+    this.evictExpired(destination);
+    for (const key of keys) this.evictExpired(key);
+    this.ensureSetTypeOrThrow(destination);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    const tx = this.db.transaction(() => {
+      const union = this._computeSetUnion(keys);
+      if (union.length === 0) {
+        const destRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(destination) as { type: string } | undefined;
+        if (destRow && destRow.type === 'set') {
+          this.db.prepare('DELETE FROM set_store WHERE key = ?').run(destination);
+          this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(destination);
+        }
+        return 0;
+      }
+      this.ensureSetKvStoreEntry(destination);
+      this.db.prepare('DELETE FROM set_store WHERE key = ?').run(destination);
+      const insertStmt = this.db.prepare('INSERT OR IGNORE INTO set_store (key, member) VALUES (?, ?)');
+      for (const member of union) {
+        insertStmt.run(destination, member);
+      }
+      return union.length;
+    });
+    return tx();
+  }
+
+  private _computeSetDiff(keys: string[]): string[] {
+    if (keys.length === 0) return [];
+    const firstRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[0]) as { member: string }[];
+    if (firstRows.length === 0) return [];
+    const firstMembers = new Set(firstRows.map(r => r.member));
+    for (let i = 1; i < keys.length; i++) {
+      const otherRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[i]) as { member: string }[];
+      for (const row of otherRows) {
+        firstMembers.delete(row.member);
+      }
+    }
+    return Array.from(firstMembers);
+  }
+
+  private _computeSetInter(keys: string[]): string[] {
+    if (keys.length === 0) return [];
+    const firstRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[0]) as { member: string }[];
+    if (firstRows.length === 0) return [];
+    let result = new Set(firstRows.map(r => r.member));
+    for (let i = 1; i < keys.length; i++) {
+      const otherRows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(keys[i]) as { member: string }[];
+      if (otherRows.length === 0) return [];
+      const otherSet = new Set(otherRows.map(r => r.member));
+      const next = new Set<string>();
+      for (const member of result) {
+        if (otherSet.has(member)) next.add(member);
+      }
+      result = next;
+      if (result.size === 0) return [];
+    }
+    return Array.from(result);
+  }
+
+  private _computeSetUnion(keys: string[]): string[] {
+    if (keys.length === 0) return [];
+    const result = new Set<string>();
+    for (const key of keys) {
+      const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(key) as { member: string }[];
+      for (const row of rows) {
+        result.add(row.member);
+      }
+    }
+    return Array.from(result);
+  }
+
+  async sintercard(keys: string[], limit?: number): Promise<number> {
+    for (const key of keys) this.evictExpired(key);
+    for (const key of keys) this.ensureSetTypeOrThrow(key);
+    const inter = this._computeSetInter(keys);
+    if (limit !== undefined) {
+      return Math.min(inter.length, limit);
+    }
+    return inter.length;
+  }
+
+  async sscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]> {
+    this.evictExpired(key);
+    this.ensureSetTypeOrThrow(key);
+    const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ? ORDER BY member').all(key) as { member: string }[];
+    if (rows.length === 0) return [0, []];
+    const allMembers = rows.map(r => r.member);
+    const effectiveCount = count ?? 10;
+    let idx = cursor;
+    let scanned = 0;
+    const regex = pattern ? globToRegex(pattern) : null;
+    const matchedMembers: string[] = [];
+    while (idx < allMembers.length) {
+      const member = allMembers[idx];
+      idx++;
+      scanned++;
+      if (!regex || regex.test(member)) {
+        matchedMembers.push(member);
+        if (matchedMembers.length >= effectiveCount) break;
+      }
+    }
+    const nextCursor = idx >= allMembers.length ? 0 : idx;
+    return [nextCursor, matchedMembers];
   }
 }

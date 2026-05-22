@@ -108,6 +108,25 @@ export interface IStorage {
   brpoplpush(source: string, destination: string, timeout: number): Promise<string | null>;
   blmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destDir: 'LEFT' | 'RIGHT', timeout: number): Promise<string | null>;
   lmpop(numkeys: number, keys: string[], dir: 'LEFT' | 'RIGHT', count?: number): Promise<{ key: string; elements: string[] } | null>;
+
+  // ── Set operations ──
+  sadd(key: string, members: string[]): Promise<number>;           // returns count of NEW members added
+  srem(key: string, members: string[]): Promise<number>;           // returns count of members removed
+  smembers(key: string): Promise<string[]>;                        // returns all members
+  scard(key: string): Promise<number>;                             // returns member count
+  sismember(key: string, member: string): Promise<boolean>;        // true/false
+  smismember(key: string, members: string[]): Promise<boolean[]>;   // array of booleans
+  srandmember(key: string, count?: number): Promise<string[]>;     // random members (negative count → duplicates)
+  spop(key: string, count?: number): Promise<string[]>;           // remove + return random members
+  smove(source: string, destination: string, member: string): Promise<boolean>; // true if moved
+  sdiff(keys: string[]): Promise<string[]>;                        // diff of first key against rest
+  sinter(keys: string[]): Promise<string[]>;                       // intersection
+  sunion(keys: string[]): Promise<string[]>;                       // union
+  sdiffstore(destination: string, keys: string[]): Promise<number>; // diff → store, return count
+  sinterstore(destination: string, keys: string[]): Promise<number>; // inter → store, return count
+  sunionstore(destination: string, keys: string[]): Promise<number>; // union → store, return count
+  sintercard(keys: string[], limit?: number): Promise<number>;     // intersection cardinality, optional LIMIT
+  sscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]>; // cursor iteration
 }
 
 export interface StorageConfig {
