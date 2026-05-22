@@ -127,6 +127,38 @@ export interface IStorage {
   sunionstore(destination: string, keys: string[]): Promise<number>; // union → store, return count
   sintercard(keys: string[], limit?: number): Promise<number>;     // intersection cardinality, optional LIMIT
   sscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]>; // cursor iteration
+
+  // === Sorted Set operations ===
+  zadd(key: string, scoreMembers: Array<{ score: number; member: string }>, options?: { nx?: boolean; xx?: boolean; gt?: boolean; lt?: boolean; ch?: boolean; incr?: boolean }): Promise<number | string | null>;
+  zrem(key: string, members: string[]): Promise<number>;
+  zscore(key: string, member: string): Promise<string | null>;
+  zcard(key: string): Promise<number>;
+  zrange(key: string, min: number | string, max: number | string, options?: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number }): Promise<Array<{ member: string; score: number }>>;
+  zrank(key: string, member: string): Promise<number | null>;
+  zrevrank(key: string, member: string): Promise<number | null>;
+  zincrby(key: string, increment: number, member: string): Promise<string>;
+  zcount(key: string, min: number | string, max: number | string): Promise<number>;
+  zremrangebyrank(key: string, start: number, stop: number): Promise<number>;
+  zremrangebyscore(key: string, min: number | string, max: number | string): Promise<number>;
+  zremrangebylex(key: string, min: string, max: string): Promise<number>;
+  zlexcount(key: string, min: string, max: string): Promise<number>;
+  zscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]>;
+  zpopmax(key: string, count?: number): Promise<Array<{ member: string; score: number }>>;
+  zpopmin(key: string, count?: number): Promise<Array<{ member: string; score: number }>>;
+  zrandmember(key: string, count?: number): Promise<Array<{ member: string; score: number }>>;
+  zmscore(key: string, members: string[]): Promise<(string | null)[]>;
+  zrangestore(destination: string, source: string, min: number | string, max: number | string, options?: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number }): Promise<number>;
+  zdiff(keys: string[]): Promise<Array<{ member: string; score: number }>>;
+  zdiffstore(destination: string, keys: string[]): Promise<number>;
+  zunion(keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<Array<{ member: string; score: number }>>;
+  zunionstore(destination: string, keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<number>;
+  zinter(keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<Array<{ member: string; score: number }>>;
+  zinterstore(destination: string, keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<number>;
+  zintercard(keys: string[], limit?: number): Promise<number>;
+  bzpopmax(keys: string[], timeout: number): Promise<{ key: string; member: string; score: number } | null>;
+  bzpopmin(keys: string[], timeout: number): Promise<{ key: string; member: string; score: number } | null>;
+  bzmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
+  zmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
 }
 
 export interface StorageConfig {

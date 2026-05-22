@@ -210,6 +210,43 @@ export class CommandHandler {
         case 'SINTERCARD': return await this.handleSintercard(args.slice(1));
         case 'SSCAN': return await this.handleSscan(args.slice(1));
 
+        // Sorted Set operations
+        case 'ZADD': return await this.handleZadd(args.slice(1));
+        case 'ZREM': return await this.handleZrem(args.slice(1));
+        case 'ZSCORE': return await this.handleZscore(args.slice(1));
+        case 'ZCARD': return await this.handleZcard(args.slice(1));
+        case 'ZRANGE': return await this.handleZrange(args.slice(1));
+        case 'ZREVRANGE': return await this.handleZrevrange(args.slice(1));
+        case 'ZRANGEBYSCORE': return await this.handleZrangebyscore(args.slice(1));
+        case 'ZREVRANGEBYSCORE': return await this.handleZrevrangebyscore(args.slice(1));
+        case 'ZRANGEBYLEX': return await this.handleZrangebylex(args.slice(1));
+        case 'ZREVRANGEBYLEX': return await this.handleZrevrangebylex(args.slice(1));
+        case 'ZRANK': return await this.handleZrank(args.slice(1));
+        case 'ZREVRANK': return await this.handleZrevrank(args.slice(1));
+        case 'ZINCRBY': return await this.handleZincrby(args.slice(1));
+        case 'ZCOUNT': return await this.handleZcount(args.slice(1));
+        case 'ZREMRANGEBYRANK': return await this.handleZremrangebyrank(args.slice(1));
+        case 'ZREMRANGEBYSCORE': return await this.handleZremrangebyscore(args.slice(1));
+        case 'ZREMRANGEBYLEX': return await this.handleZremrangebylex(args.slice(1));
+        case 'ZLEXCOUNT': return await this.handleZlexcount(args.slice(1));
+        case 'ZSCAN': return await this.handleZscan(args.slice(1));
+        case 'ZPOPMAX': return await this.handleZpopmax(args.slice(1));
+        case 'ZPOPMIN': return await this.handleZpopmin(args.slice(1));
+        case 'ZRANDMEMBER': return await this.handleZrandmember(args.slice(1));
+        case 'ZMSCORE': return await this.handleZmscore(args.slice(1));
+        case 'ZRANGESTORE': return await this.handleZrangestore(args.slice(1));
+        case 'ZDIFF': return await this.handleZdiff(args.slice(1));
+        case 'ZDIFFSTORE': return await this.handleZdiffstore(args.slice(1));
+        case 'ZUNION': return await this.handleZunion(args.slice(1));
+        case 'ZUNIONSTORE': return await this.handleZunionstore(args.slice(1));
+        case 'ZINTER': return await this.handleZinter(args.slice(1));
+        case 'ZINTERSTORE': return await this.handleZinterstore(args.slice(1));
+        case 'ZINTERCARD': return await this.handleZintercard(args.slice(1));
+        case 'BZPOPMAX': return await this.handleBzpopmax(args.slice(1));
+        case 'BZPOPMIN': return await this.handleBzpopmin(args.slice(1));
+        case 'BZMPOP': return await this.handleBzmpop(args.slice(1));
+        case 'ZMPOP': return await this.handleZmpop(args.slice(1));
+
         default:
           return encodeError(`unknown command '${args[0]}'`);
       }
@@ -428,6 +465,14 @@ export class CommandHandler {
       'SADD', 'SREM', 'SMEMBERS', 'SCARD', 'SISMEMBER', 'SMISMEMBER',
       'SRANDMEMBER', 'SPOP', 'SMOVE', 'SDIFF', 'SINTER', 'SUNION',
       'SDIFFSTORE', 'SINTERSTORE', 'SUNIONSTORE', 'SINTERCARD', 'SSCAN',
+      'ZADD', 'ZREM', 'ZSCORE', 'ZCARD', 'ZRANGE', 'ZREVRANGE',
+      'ZRANGEBYSCORE', 'ZREVRANGEBYSCORE', 'ZRANGEBYLEX', 'ZREVRANGEBYLEX',
+      'ZRANK', 'ZREVRANK', 'ZINCRBY', 'ZCOUNT',
+      'ZREMRANGEBYRANK', 'ZREMRANGEBYSCORE', 'ZREMRANGEBYLEX', 'ZLEXCOUNT',
+      'ZSCAN', 'ZPOPMAX', 'ZPOPMIN', 'ZRANDMEMBER', 'ZMSCORE',
+      'ZRANGESTORE', 'ZDIFF', 'ZDIFFSTORE', 'ZUNION', 'ZUNIONSTORE',
+      'ZINTER', 'ZINTERSTORE', 'ZINTERCARD',
+      'BZPOPMAX', 'BZPOPMIN', 'BZMPOP', 'ZMPOP',
     ];
     return encodeArray(commands);
   }
@@ -2044,5 +2089,873 @@ export class CommandHandler {
     const cursorStr = encodeBulkString(String(result[0]));
     const membersArr = encodeArray(result[1]);
     return `*2\r\n${cursorStr}${membersArr}`;
+  }
+
+  // === Sorted Set operations ===
+
+  private async handleZadd(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZADD' command");
+    }
+    const key = args[0];
+    let nx = false, xx = false, gt = false, lt = false, ch = false, incr = false;
+    let i = 1;
+    // Parse flags
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'NX') { nx = true; i++; }
+      else if (opt === 'XX') { xx = true; i++; }
+      else if (opt === 'GT') { gt = true; i++; }
+      else if (opt === 'LT') { lt = true; i++; }
+      else if (opt === 'CH') { ch = true; i++; }
+      else if (opt === 'INCR') { incr = true; i++; }
+      else break;
+    }
+    // Remaining args are score-member pairs
+    const remaining = args.length - i;
+    if (remaining < 2 || remaining % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'ZADD' command");
+    }
+    const scoreMembers: Array<{ score: number; member: string }> = [];
+    for (let j = i; j < args.length; j += 2) {
+      const score = parseFloat(args[j]);
+      if (isNaN(score)) {
+        return encodeError('ERR value is not a valid float');
+      }
+      scoreMembers.push({ score, member: args[j + 1] });
+    }
+    if (incr && scoreMembers.length > 1) {
+      return encodeError('ERR INCR option supports a single increment-element pair');
+    }
+    const options: { nx?: boolean; xx?: boolean; gt?: boolean; lt?: boolean; ch?: boolean; incr?: boolean } = {};
+    if (nx) options.nx = true;
+    if (xx) options.xx = true;
+    if (gt) options.gt = true;
+    if (lt) options.lt = true;
+    if (ch) options.ch = true;
+    if (incr) options.incr = true;
+    const result = await this.storage.zadd(key, scoreMembers, options);
+    if (incr) {
+      // Result is string | null
+      return encodeBulkString(result as string | null);
+    }
+    // Result is number
+    return encodeInteger(result as number);
+  }
+
+  private async handleZrem(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZREM' command");
+    }
+    const key = args[0];
+    const members = args.slice(1);
+    const result = await this.storage.zrem(key, members);
+    return encodeInteger(result);
+  }
+
+  private async handleZscore(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'ZSCORE' command");
+    }
+    const result = await this.storage.zscore(args[0], args[1]);
+    return encodeBulkString(result);
+  }
+
+  private async handleZcard(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'ZCARD' command");
+    }
+    const result = await this.storage.zcard(args[0]);
+    return encodeInteger(result);
+  }
+
+  private async handleZrange(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZRANGE' command");
+    }
+    const key = args[0];
+    const min = args[1];
+    const max = args[2];
+    let byScore = false, byLex = false, rev = false, withScores = false;
+    let offset: number | undefined, count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'BYSCORE') { byScore = true; }
+      else if (opt === 'BYLEX') { byLex = true; }
+      else if (opt === 'REV') { rev = true; }
+      else if (opt === 'WITHSCORES') { withScores = true; }
+      else if (opt === 'LIMIT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const options: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number } = {};
+    if (byScore) options.byScore = true;
+    if (byLex) options.byLex = true;
+    if (rev) options.rev = true;
+    if (offset !== undefined) options.offset = offset;
+    if (count !== undefined) options.count = count;
+    const pairs = await this.storage.zrange(key, min, max, options);
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZrevrange(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZREVRANGE' command");
+    }
+    const key = args[0];
+    const min = args[1];
+    const max = args[2];
+    let withScores = false;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i].toUpperCase() === 'WITHSCORES') { withScores = true; }
+    }
+    const pairs = await this.storage.zrange(key, min, max, { rev: true });
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZrangebyscore(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZRANGEBYSCORE' command");
+    }
+    const key = args[0];
+    const min = args[1];
+    const max = args[2];
+    let withScores = false;
+    let offset: number | undefined, count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WITHSCORES') { withScores = true; }
+      else if (opt === 'LIMIT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const options: { byScore: boolean; rev?: boolean; offset?: number; count?: number } = { byScore: true };
+    if (offset !== undefined) options.offset = offset;
+    if (count !== undefined) options.count = count;
+    const pairs = await this.storage.zrange(key, min, max, options);
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZrevrangebyscore(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZREVRANGEBYSCORE' command");
+    }
+    const key = args[0];
+    // Note: ZREVRANGEBYSCORE args are max min (reversed)
+    const max = args[1];
+    const min = args[2];
+    let withScores = false;
+    let offset: number | undefined, count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WITHSCORES') { withScores = true; }
+      else if (opt === 'LIMIT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const options: { byScore: boolean; rev: boolean; offset?: number; count?: number } = { byScore: true, rev: true };
+    if (offset !== undefined) options.offset = offset;
+    if (count !== undefined) options.count = count;
+    const pairs = await this.storage.zrange(key, max, min, options);
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZrangebylex(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZRANGEBYLEX' command");
+    }
+    const key = args[0];
+    const min = args[1];
+    const max = args[2];
+    let offset: number | undefined, count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'LIMIT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const options: { byLex: boolean; offset?: number; count?: number } = { byLex: true };
+    if (offset !== undefined) options.offset = offset;
+    if (count !== undefined) options.count = count;
+    const pairs = await this.storage.zrange(key, min, max, options);
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZrevrangebylex(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZREVRANGEBYLEX' command");
+    }
+    const key = args[0];
+    // Note: ZREVRANGEBYLEX args are max min (reversed)
+    const max = args[1];
+    const min = args[2];
+    let offset: number | undefined, count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'LIMIT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const options: { byLex: boolean; rev: boolean; offset?: number; count?: number } = { byLex: true, rev: true };
+    if (offset !== undefined) options.offset = offset;
+    if (count !== undefined) options.count = count;
+    const pairs = await this.storage.zrange(key, max, min, options);
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZrank(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'ZRANK' command");
+    }
+    const result = await this.storage.zrank(args[0], args[1]);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleZrevrank(args: string[]): Promise<string> {
+    if (args.length !== 2) {
+      return encodeError("wrong number of arguments for 'ZREVRANK' command");
+    }
+    const result = await this.storage.zrevrank(args[0], args[1]);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleZincrby(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'ZINCRBY' command");
+    }
+    const increment = parseFloat(args[1]);
+    if (isNaN(increment)) {
+      return encodeError('ERR value is not a valid float');
+    }
+    const result = await this.storage.zincrby(args[0], increment, args[2]);
+    return encodeBulkString(result);
+  }
+
+  private async handleZcount(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'ZCOUNT' command");
+    }
+    const result = await this.storage.zcount(args[0], args[1], args[2]);
+    return encodeInteger(result);
+  }
+
+  private async handleZremrangebyrank(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'ZREMRANGEBYRANK' command");
+    }
+    const start = parseInt(args[1]);
+    const stop = parseInt(args[2]);
+    if (isNaN(start) || isNaN(stop)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.zremrangebyrank(args[0], start, stop);
+    return encodeInteger(result);
+  }
+
+  private async handleZremrangebyscore(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'ZREMRANGEBYSCORE' command");
+    }
+    const result = await this.storage.zremrangebyscore(args[0], args[1], args[2]);
+    return encodeInteger(result);
+  }
+
+  private async handleZremrangebylex(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'ZREMRANGEBYLEX' command");
+    }
+    const result = await this.storage.zremrangebylex(args[0], args[1], args[2]);
+    return encodeInteger(result);
+  }
+
+  private async handleZlexcount(args: string[]): Promise<string> {
+    if (args.length !== 3) {
+      return encodeError("wrong number of arguments for 'ZLEXCOUNT' command");
+    }
+    const result = await this.storage.zlexcount(args[0], args[1], args[2]);
+    return encodeInteger(result);
+  }
+
+  private async handleZscan(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZSCAN' command");
+    }
+    const key = args[0];
+    const cursor = parseInt(args[1]);
+    if (isNaN(cursor)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    let pattern: string | undefined;
+    let count: number | undefined;
+    for (let i = 2; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'MATCH') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        pattern = args[i];
+      } else if (opt === 'COUNT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const result = await this.storage.zscan(key, cursor, pattern, count);
+    const cursorStr = encodeBulkString(String(result[0]));
+    const membersArr = encodeArray(result[1]);
+    return `*2\r\n${cursorStr}${membersArr}`;
+  }
+
+  private async handleZpopmax(args: string[]): Promise<string> {
+    if (args.length < 1 || args.length > 2) {
+      return encodeError("wrong number of arguments for 'ZPOPMAX' command");
+    }
+    const key = args[0];
+    let count: number | undefined;
+    if (args.length === 2) {
+      count = parseInt(args[1]);
+      if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.zpopmax(key, count);
+    if (count === undefined) {
+      // No count: return 2-element array or nil
+      if (result.length === 0) return encodeBulkString(null);
+      return encodeArray([result[0].member, String(result[0].score)]);
+    }
+    // With count: flat array [m1, s1, m2, s2, ...]
+    const flat: string[] = [];
+    for (const p of result) {
+      flat.push(p.member, String(p.score));
+    }
+    return encodeArray(flat);
+  }
+
+  private async handleZpopmin(args: string[]): Promise<string> {
+    if (args.length < 1 || args.length > 2) {
+      return encodeError("wrong number of arguments for 'ZPOPMIN' command");
+    }
+    const key = args[0];
+    let count: number | undefined;
+    if (args.length === 2) {
+      count = parseInt(args[1]);
+      if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.zpopmin(key, count);
+    if (count === undefined) {
+      if (result.length === 0) return encodeBulkString(null);
+      return encodeArray([result[0].member, String(result[0].score)]);
+    }
+    const flat: string[] = [];
+    for (const p of result) {
+      flat.push(p.member, String(p.score));
+    }
+    return encodeArray(flat);
+  }
+
+  private async handleZrandmember(args: string[]): Promise<string> {
+    if (args.length < 1) {
+      return encodeError("wrong number of arguments for 'ZRANDMEMBER' command");
+    }
+    const key = args[0];
+    let count: number | undefined;
+    let withScores = false;
+    if (args.length >= 2) {
+      count = parseInt(args[1]);
+      if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      if (args.length >= 3 && args[2].toUpperCase() === 'WITHSCORES') {
+        withScores = true;
+      }
+    }
+    const result = await this.storage.zrandmember(key, count);
+    if (count === undefined) {
+      // Single member
+      if (result.length === 0) return encodeBulkString(null);
+      return encodeBulkString(result[0].member);
+    }
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of result) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(result.map(p => p.member));
+  }
+
+  private async handleZmscore(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZMSCORE' command");
+    }
+    const key = args[0];
+    const members = args.slice(1);
+    const results = await this.storage.zmscore(key, members);
+    const parts = results.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleZrangestore(args: string[]): Promise<string> {
+    if (args.length < 4) {
+      return encodeError("wrong number of arguments for 'ZRANGESTORE' command");
+    }
+    const destination = args[0];
+    const source = args[1];
+    const min = args[2];
+    const max = args[3];
+    let byScore = false, byLex = false, rev = false;
+    let offset: number | undefined, count: number | undefined;
+    for (let i = 4; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'BYSCORE') { byScore = true; }
+      else if (opt === 'BYLEX') { byLex = true; }
+      else if (opt === 'REV') { rev = true; }
+      else if (opt === 'LIMIT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const options: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number } = {};
+    if (byScore) options.byScore = true;
+    if (byLex) options.byLex = true;
+    if (rev) options.rev = true;
+    if (offset !== undefined) options.offset = offset;
+    if (count !== undefined) options.count = count;
+    const result = await this.storage.zrangestore(destination, source, min, max, options);
+    return encodeInteger(result);
+  }
+
+  private async handleZdiff(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZDIFF' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZDIFF' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let withScores = false;
+    if (args.length > 1 + numkeys) {
+      if (args[1 + numkeys].toUpperCase() === 'WITHSCORES') {
+        withScores = true;
+      }
+    }
+    const pairs = await this.storage.zdiff(keys);
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZdiffstore(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZDIFFSTORE' command");
+    }
+    const destination = args[0];
+    const numkeys = parseInt(args[1]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 2 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZDIFFSTORE' command");
+    }
+    const keys = args.slice(2, 2 + numkeys);
+    const result = await this.storage.zdiffstore(destination, keys);
+    return encodeInteger(result);
+  }
+
+  private async handleZunion(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZUNION' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZUNION' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let weights: number[] | undefined;
+    let aggregate: string | undefined;
+    let withScores = false;
+    for (let i = 1 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WEIGHTS') {
+        weights = [];
+        for (let j = 0; j < numkeys; j++) {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          const w = parseFloat(args[i]);
+          if (isNaN(w)) return encodeError('ERR weight value is not a float');
+          weights.push(w);
+        }
+      } else if (opt === 'AGGREGATE') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        aggregate = args[i].toUpperCase();
+        if (aggregate !== 'SUM' && aggregate !== 'MIN' && aggregate !== 'MAX') {
+          return encodeError('ERR syntax error');
+        }
+      } else if (opt === 'WITHSCORES') {
+        withScores = true;
+      }
+    }
+    const options: { weights?: number[]; aggregate?: string } = {};
+    if (weights) options.weights = weights;
+    if (aggregate) options.aggregate = aggregate;
+    const pairs = await this.storage.zunion(keys, options);
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZunionstore(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZUNIONSTORE' command");
+    }
+    const destination = args[0];
+    const numkeys = parseInt(args[1]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 2 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZUNIONSTORE' command");
+    }
+    const keys = args.slice(2, 2 + numkeys);
+    let weights: number[] | undefined;
+    let aggregate: string | undefined;
+    for (let i = 2 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WEIGHTS') {
+        weights = [];
+        for (let j = 0; j < numkeys; j++) {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          const w = parseFloat(args[i]);
+          if (isNaN(w)) return encodeError('ERR weight value is not a float');
+          weights.push(w);
+        }
+      } else if (opt === 'AGGREGATE') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        aggregate = args[i].toUpperCase();
+        if (aggregate !== 'SUM' && aggregate !== 'MIN' && aggregate !== 'MAX') {
+          return encodeError('ERR syntax error');
+        }
+      }
+    }
+    const options: { weights?: number[]; aggregate?: string } = {};
+    if (weights) options.weights = weights;
+    if (aggregate) options.aggregate = aggregate;
+    const result = await this.storage.zunionstore(destination, keys, options);
+    return encodeInteger(result);
+  }
+
+  private async handleZinter(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZINTER' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZINTER' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let weights: number[] | undefined;
+    let aggregate: string | undefined;
+    let withScores = false;
+    for (let i = 1 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WEIGHTS') {
+        weights = [];
+        for (let j = 0; j < numkeys; j++) {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          const w = parseFloat(args[i]);
+          if (isNaN(w)) return encodeError('ERR weight value is not a float');
+          weights.push(w);
+        }
+      } else if (opt === 'AGGREGATE') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        aggregate = args[i].toUpperCase();
+        if (aggregate !== 'SUM' && aggregate !== 'MIN' && aggregate !== 'MAX') {
+          return encodeError('ERR syntax error');
+        }
+      } else if (opt === 'WITHSCORES') {
+        withScores = true;
+      }
+    }
+    const options: { weights?: number[]; aggregate?: string } = {};
+    if (weights) options.weights = weights;
+    if (aggregate) options.aggregate = aggregate;
+    const pairs = await this.storage.zinter(keys, options);
+    if (withScores) {
+      const flat: string[] = [];
+      for (const p of pairs) {
+        flat.push(p.member, String(p.score));
+      }
+      return encodeArray(flat);
+    }
+    return encodeArray(pairs.map(p => p.member));
+  }
+
+  private async handleZinterstore(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZINTERSTORE' command");
+    }
+    const destination = args[0];
+    const numkeys = parseInt(args[1]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 2 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZINTERSTORE' command");
+    }
+    const keys = args.slice(2, 2 + numkeys);
+    let weights: number[] | undefined;
+    let aggregate: string | undefined;
+    for (let i = 2 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WEIGHTS') {
+        weights = [];
+        for (let j = 0; j < numkeys; j++) {
+          i++;
+          if (i >= args.length) return encodeError('ERR syntax error');
+          const w = parseFloat(args[i]);
+          if (isNaN(w)) return encodeError('ERR weight value is not a float');
+          weights.push(w);
+        }
+      } else if (opt === 'AGGREGATE') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        aggregate = args[i].toUpperCase();
+        if (aggregate !== 'SUM' && aggregate !== 'MIN' && aggregate !== 'MAX') {
+          return encodeError('ERR syntax error');
+        }
+      }
+    }
+    const options: { weights?: number[]; aggregate?: string } = {};
+    if (weights) options.weights = weights;
+    if (aggregate) options.aggregate = aggregate;
+    const result = await this.storage.zinterstore(destination, keys, options);
+    return encodeInteger(result);
+  }
+
+  private async handleZintercard(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'ZINTERCARD' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys) {
+      return encodeError("wrong number of arguments for 'ZINTERCARD' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let limit: number | undefined;
+    const remaining = args.slice(1 + numkeys);
+    for (let i = 0; i < remaining.length; i++) {
+      const opt = remaining[i].toUpperCase();
+      if (opt === 'LIMIT') {
+        i++;
+        if (i >= remaining.length) return encodeError('ERR syntax error');
+        limit = parseInt(remaining[i]);
+        if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const result = await this.storage.zintercard(keys, limit);
+    return encodeInteger(result);
+  }
+
+  private async handleBzpopmax(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'BZPOPMAX' command");
+    }
+    const timeout = parseFloat(args[args.length - 1]);
+    if (isNaN(timeout)) {
+      return encodeError('ERR timeout is not a float or out of range');
+    }
+    const keys = args.slice(0, -1);
+    const result = await this.storage.bzpopmax(keys, timeout);
+    if (result === null) return encodeArray(null);
+    return encodeArray([result.key, result.member, String(result.score)]);
+  }
+
+  private async handleBzpopmin(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'BZPOPMIN' command");
+    }
+    const timeout = parseFloat(args[args.length - 1]);
+    if (isNaN(timeout)) {
+      return encodeError('ERR timeout is not a float or out of range');
+    }
+    const keys = args.slice(0, -1);
+    const result = await this.storage.bzpopmin(keys, timeout);
+    if (result === null) return encodeArray(null);
+    return encodeArray([result.key, result.member, String(result.score)]);
+  }
+
+  private async handleBzmpop(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'BZMPOP' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys + 1) {
+      return encodeError("wrong number of arguments for 'BZMPOP' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let minmax: 'MIN' | 'MAX' | undefined;
+    let count: number | undefined;
+    for (let i = 1 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'MIN' || opt === 'MAX') {
+        minmax = opt as 'MIN' | 'MAX';
+      } else if (opt === 'COUNT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count) || count <= 0) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    if (!minmax) {
+      return encodeError('ERR syntax error');
+    }
+    const result = await this.storage.bzmpop(numkeys, keys, minmax, count);
+    if (result === null) return encodeArray(null);
+    const keyEncoded = encodeBulkString(result.key);
+    const flat: string[] = [];
+    for (const e of result.elements) {
+      flat.push(e.member, String(e.score));
+    }
+    const elementsEncoded = encodeArray(flat);
+    return `*2\r\n${keyEncoded}${elementsEncoded}`;
+  }
+
+  private async handleZmpop(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'ZMPOP' command");
+    }
+    const numkeys = parseInt(args[0]);
+    if (isNaN(numkeys) || numkeys < 1) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length < 1 + numkeys + 1) {
+      return encodeError("wrong number of arguments for 'ZMPOP' command");
+    }
+    const keys = args.slice(1, 1 + numkeys);
+    let minmax: 'MIN' | 'MAX' | undefined;
+    let count: number | undefined;
+    for (let i = 1 + numkeys; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'MIN' || opt === 'MAX') {
+        minmax = opt as 'MIN' | 'MAX';
+      } else if (opt === 'COUNT') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count) || count <= 0) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    if (!minmax) {
+      return encodeError('ERR syntax error');
+    }
+    const result = await this.storage.zmpop(numkeys, keys, minmax, count);
+    if (result === null) return encodeArray(null);
+    const keyEncoded = encodeBulkString(result.key);
+    const flat: string[] = [];
+    for (const e of result.elements) {
+      flat.push(e.member, String(e.score));
+    }
+    const elementsEncoded = encodeArray(flat);
+    return `*2\r\n${keyEncoded}${elementsEncoded}`;
   }
 }
