@@ -160,6 +160,45 @@ export interface IStorage {
   bzmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
   zmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
 
+  // === Bitmap operations ===
+  setbit(key: string, offset: number, value: 0 | 1): Promise<number>;
+  getbit(key: string, offset: number): Promise<number>;
+  bitcount(key: string, start?: number, end?: number): Promise<number>;
+  bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<number>;
+  bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: string[]): Promise<number>;
+  bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }>): Promise<(number | null)[]>;
+  bitfieldRo(key: string, operations: Array<{ type: 'GET'; encoding: string; offset: number }>): Promise<(number | null)[]>;
+
+  // === HyperLogLog operations ===
+  pfadd(key: string, elements: string[]): Promise<number>;
+  pfcount(keys: string[]): Promise<number>;
+  pfmerge(destkey: string, sourceKeys: string[]): Promise<void>;
+
+  // === JSON operations ===
+  jsonSet(key: string, path: string, value: string, nx?: boolean, xx?: boolean): Promise<string | null>;
+  jsonGet(key: string, paths?: string[]): Promise<string | null>;
+  jsonDel(key: string, path?: string): Promise<number>;
+  jsonType(key: string, path?: string): Promise<string | null>;
+  jsonStrlen(key: string, path?: string): Promise<number | null>;
+  jsonStrappend(key: string, path: string, value: string): Promise<number | null>;
+  jsonObjkeys(key: string, path?: string): Promise<string[] | null>;
+  jsonObjlen(key: string, path?: string): Promise<number | null>;
+  jsonArrappend(key: string, path: string, values: string[]): Promise<(number | null)[]>;
+  jsonArrpop(key: string, path?: string, index?: number): Promise<string | null>;
+  jsonArrlen(key: string, path?: string): Promise<number | null>;
+  jsonArrindex(key: string, path: string, value: string, start?: number, stop?: number): Promise<number | null>;
+  jsonArrinsert(key: string, path: string, index: number, values: string[]): Promise<(number | null)[]>;
+  jsonArrtrim(key: string, path: string, start: number, stop: number): Promise<number | null>;
+  jsonNumincrby(key: string, path: string, increment: number): Promise<string | null>;
+  jsonNummultby(key: string, path: string, multiplier: number): Promise<string | null>;
+  jsonMget(keys: string[], path: string): Promise<(string | null)[]>;
+  jsonMset(pairs: Array<{ key: string; path: string; value: string }>): Promise<void>;
+  jsonToggle(key: string, path?: string): Promise<string | null>;
+  jsonClear(key: string, path?: string): Promise<number>;
+  jsonDebugMemory(key: string, path?: string): Promise<number | null>;
+  jsonResp(key: string, path?: string): Promise<string | null>;
+  jsonMerge(key: string, path: string, value: string): Promise<void>;
+
   // === Server / Persistence ===
 
   /** Force a save/flush of data to persistent storage. No-op for InMemoryStorage. */

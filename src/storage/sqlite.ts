@@ -2870,6 +2870,899 @@ export class SqliteStorage implements IStorage {
     return this.bzmpop(numkeys, keys, minmax, count);
   }
 
+  // === Bitmap helpers ===
+
+  private sqliteStringToBytes(str: string): number[] {
+    const bytes: number[] = [];
+    for (let i = 0; i < str.length; i++) { bytes.push(str.charCodeAt(i)); }
+    return bytes;
+  }
+
+  private sqliteBytesToString(bytes: number[]): string { return String.fromCharCode(...bytes); }
+
+  private sqliteGetBitAt(bytes: number[], offset: number): 0 | 1 {
+    const byteIndex = Math.floor(offset / 8);
+    const bitIndex = 7 - (offset % 8);
+    if (byteIndex >= bytes.length) return 0;
+    return ((bytes[byteIndex] >> bitIndex) & 1) as 0 | 1;
+  }
+
+  private sqliteSetBitAt(bytes: number[], offset: number, value: 0 | 1): 0 | 1 {
+    const byteIndex = Math.floor(offset / 8);
+    const bitIndex = 7 - (offset % 8);
+    while (bytes.length <= byteIndex) bytes.push(0);
+    const oldVal = (bytes[byteIndex] >> bitIndex) & 1;
+    if (value === 1) { bytes[byteIndex] |= (1 << bitIndex); } else { bytes[byteIndex] &= ~(1 << bitIndex); }
+    return oldVal as 0 | 1;
+  }
+
+  private ensureStringTypeOrThrow(key: string): void {
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (row && row.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+  }
+
+  private ensureHllTypeOrThrow(key: string): void {
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (row && row.type !== 'hyperloglog') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+  }
+
+  private ensureJsonTypeOrThrow(key: string): void {
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (row && row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+  }
+
+  // === HLL helpers ===
+
+  private HLL_REGISTERS = 16384;
+  private HLL_BYTES = 12288;
+
+  private murmurHash64(str: string): bigint {
+    let h1 = 0x9e3779b97f4a7c15n;
+    for (let i = 0; i < str.length; i++) {
+      h1 ^= BigInt(str.charCodeAt(i));
+      h1 = (h1 * 0xbf58476d1ce4e5b9n) & 0xFFFFFFFFFFFFFFFFn;
+      h1 = ((h1 ^ (h1 >> 31n)) & 0xFFFFFFFFFFFFFFFFn);
+    }
+    return h1;
+  }
+
+  private hllIndex(hash: bigint): number { return Number(hash & 0x3FFFn); }
+
+  private hllRho(hash: bigint): number {
+    const remaining = hash >> 14n;
+    if (remaining === 0n) return 51;
+    let count = 1;
+    let val = remaining;
+    while ((val & 1n) === 0n && count < 51) { count++; val >>= 1n; }
+    return count;
+  }
+
+  private hllEncode(registers: Uint8Array): string { return Buffer.from(registers).toString('base64'); }
+  private hllDecode(data: string): Uint8Array { return new Uint8Array(Buffer.from(data, 'base64')); }
+
+  private read6BitRegister(data: Uint8Array, index: number): number {
+    const bitOffset = index * 6;
+    const byteOffset = Math.floor(bitOffset / 8);
+    const bitInByte = bitOffset % 8;
+    let value = 0, bitsNeeded = 6, currentByte = byteOffset, currentBit = bitInByte;
+    while (bitsNeeded > 0) {
+      const bitsAvailable = 8 - currentBit;
+      const bitsToRead = Math.min(bitsAvailable, bitsNeeded);
+      const mask = ((1 << bitsToRead) - 1) << (bitsAvailable - bitsToRead);
+      const bits = (data[currentByte] & mask) >> (bitsAvailable - bitsToRead);
+      value = (value << bitsToRead) | bits;
+      bitsNeeded -= bitsToRead; currentBit = 0; currentByte++;
+    }
+    return value;
+  }
+
+  private write6BitRegister(data: Uint8Array, index: number, value: number): void {
+    const bitOffset = index * 6;
+    const byteOffset = Math.floor(bitOffset / 8);
+    const bitInByte = bitOffset % 8;
+    let bitsToWrite = 6, currentByte = byteOffset, currentBit = bitInByte, shiftedValue = value;
+    while (bitsToWrite > 0) {
+      const bitsAvailable = 8 - currentBit;
+      const bitsToWriteNow = Math.min(bitsAvailable, bitsToWrite);
+      const mask = ((1 << bitsToWriteNow) - 1);
+      const bits = (shiftedValue >> (bitsToWrite - bitsToWriteNow)) & mask;
+      const shift = bitsAvailable - bitsToWriteNow;
+      data[currentByte] &= ~(mask << shift);
+      data[currentByte] |= (bits << shift);
+      bitsToWrite -= bitsToWriteNow; currentBit = 0; currentByte++;
+    }
+  }
+
+  private hllEstimate(registers: Uint8Array): number {
+    const m = this.HLL_REGISTERS;
+    let sum = 0, zeros = 0;
+    for (let i = 0; i < m; i++) {
+      const regVal = this.read6BitRegister(registers, i);
+      sum += 1 / Math.pow(2, regVal);
+      if (regVal === 0) zeros++;
+    }
+    const alpha = 0.7213 / (1 + 1.079 / m);
+    const estimate = alpha * m * m / sum;
+    if (estimate <= 2.5 * m && zeros > 0) return Math.round(m * Math.log(m / zeros));
+    return Math.max(0, Math.round(estimate));
+  }
+
+  // === JSON helpers ===
+
+  private sqliteParseJsonPath(path: string): Array<{ type: 'field'; name: string } | { type: 'index'; index: number }> {
+    let p = path;
+    if (p === '$' || p === '.') return [];
+    if (p.startsWith('$.')) p = p.slice(2); else if (p.startsWith('$')) p = p.slice(1); else if (p.startsWith('.')) p = p.slice(1);
+    const segments: Array<{ type: 'field'; name: string } | { type: 'index'; index: number }> = [];
+    let i = 0;
+    while (i < p.length) {
+      if (p[i] === '[') {
+        const end = p.indexOf(']', i); if (end === -1) break;
+        const content = p.slice(i + 1, end);
+        if (/^\d+$/.test(content)) { segments.push({ type: 'index', index: parseInt(content) }); }
+        else { segments.push({ type: 'field', name: content.replace(/^['"]|['"]$/g, '') }); }
+        i = end + 1; if (i < p.length && p[i] === '.') i++;
+      } else {
+        let end = i; while (end < p.length && p[end] !== '.' && p[end] !== '[') end++;
+        const fieldName = p.slice(i, end); if (fieldName) segments.push({ type: 'field', name: fieldName });
+        i = end; if (i < p.length && p[i] === '.') i++;
+      }
+    }
+    return segments;
+  }
+
+  private sqliteJsonResolvePath(root: any, path: string): { parent: any; key: string | number; value: any }[] {
+    if (path === '$' || path === '.' || path === '') return [{ parent: null, key: '', value: root }];
+    const segments = this.sqliteParseJsonPath(path);
+    let current: { parent: any; key: string | number; value: any }[] = [{ parent: null, key: '', value: root }];
+    for (const seg of segments) {
+      const next: { parent: any; key: string | number; value: any }[] = [];
+      for (const item of current) {
+        if (seg.type === 'field') {
+          if (item.value !== null && typeof item.value === 'object' && !Array.isArray(item.value) && seg.name in item.value) {
+            next.push({ parent: item.value, key: seg.name, value: item.value[seg.name] });
+          }
+        } else if (seg.type === 'index') {
+          if (Array.isArray(item.value) && seg.index < item.value.length && seg.index >= 0) {
+            next.push({ parent: item.value, key: seg.index, value: item.value[seg.index] });
+          }
+        }
+      }
+      current = next;
+    }
+    return current;
+  }
+
+  private sqliteJsonTypeOf(val: any): string {
+    if (val === null) return 'null'; if (Array.isArray(val)) return 'array'; if (typeof val === 'object') return 'object';
+    if (typeof val === 'boolean') return 'boolean'; if (typeof val === 'number') return Number.isInteger(val) ? 'integer' : 'number';
+    if (typeof val === 'string') return 'string'; return 'unknown';
+  }
+
+  private sqliteDeepMerge(target: any, source: any): any {
+    if (source === null) return null;
+    if (typeof source !== 'object' || Array.isArray(source)) return source;
+    if (typeof target !== 'object' || target === null || Array.isArray(target)) return source;
+    const result = { ...target };
+    for (const key of Object.keys(source)) {
+      if (source[key] === null) { delete result[key]; }
+      else if (typeof source[key] === 'object' && !Array.isArray(source[key]) && typeof result[key] === 'object' && !Array.isArray(result[key])) { result[key] = this.sqliteDeepMerge(result[key], source[key]); }
+      else { result[key] = source[key]; }
+    }
+    return result;
+  }
+
+  // === Bitmap operations ===
+
+  async setbit(key: string, offset: number, value: 0 | 1): Promise<number> {
+    this.evictExpired(key);
+    this.ensureStringTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    let current: string;
+    let existingExpiresAt: number | null;
+    if (!row) { current = ''; existingExpiresAt = null; }
+    else { current = row.value; existingExpiresAt = row.expires_at; }
+    const bytes = this.sqliteStringToBytes(current);
+    const oldBit = this.sqliteSetBitAt(bytes, offset, value);
+    const newValue = this.sqliteBytesToString(bytes);
+    this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', ?)").run(key, newValue, existingExpiresAt);
+    return oldBit;
+  }
+
+  async getbit(key: string, offset: number): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return 0;
+    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const bytes = this.sqliteStringToBytes(row.value);
+    return this.sqliteGetBitAt(bytes, offset);
+  }
+
+  async bitcount(key: string, start?: number, end?: number): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return 0;
+    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const bytes = this.sqliteStringToBytes(row.value);
+    if (bytes.length === 0) return 0;
+    let s = start ?? 0, e = end ?? -1;
+    if (s < 0) s = Math.max(bytes.length + s, 0);
+    if (e < 0) e = bytes.length + e;
+    if (s > e || s >= bytes.length) return 0;
+    if (e >= bytes.length) e = bytes.length - 1;
+    let count = 0;
+    for (let i = s; i <= e; i++) { let b = bytes[i]; while (b) { count += b & 1; b >>= 1; } }
+    return count;
+  }
+
+  async bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return bit === 0 ? 0 : -1;
+    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const bytes = this.sqliteStringToBytes(row.value);
+    if (bytes.length === 0) return bit === 0 ? 0 : -1;
+    let s = start ?? 0, e = end ?? bytes.length - 1;
+    if (s < 0) s = Math.max(bytes.length + s, 0);
+    if (e < 0) e = bytes.length + e;
+    if (s > e || s >= bytes.length) return -1;
+    if (e >= bytes.length) e = bytes.length - 1;
+    for (let i = s; i <= e; i++) {
+      for (let j = 7; j >= 0; j--) {
+        const b = (bytes[i] >> j) & 1;
+        if (b === bit) return i * 8 + (7 - j);
+      }
+    }
+    return -1;
+  }
+
+  async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: string[]): Promise<number> {
+    for (const key of keys) this.evictExpired(key);
+    for (const key of keys) {
+      const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+      if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+    const srcArrays: number[][] = [];
+    for (const key of keys) {
+      const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+      srcArrays.push(row ? this.sqliteStringToBytes(row.value) : []);
+    }
+    let maxLen = 0;
+    for (const arr of srcArrays) { if (arr.length > maxLen) maxLen = arr.length; }
+    if (operation === 'NOT') {
+      if (keys.length !== 1) throw new Error('ERR BITOP NOT must have exactly one source key');
+      const src = srcArrays[0];
+      const result: number[] = [];
+      for (let i = 0; i < src.length; i++) result.push((~src[i]) & 0xFF);
+      const resultStr = this.sqliteBytesToString(result);
+      this.evictExpired(destkey);
+      this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)").run(destkey, resultStr);
+      return result.length;
+    }
+    if (keys.length === 0) { this.evictExpired(destkey); this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(destkey); return 0; }
+    const result: number[] = new Array(maxLen).fill(0);
+    for (let i = 0; i < maxLen; i++) {
+      if (operation === 'AND') { let val = 0xFF; for (const arr of srcArrays) val &= (i < arr.length ? arr[i] : 0); result[i] = val; }
+      else if (operation === 'OR') { let val = 0; for (const arr of srcArrays) val |= (i < arr.length ? arr[i] : 0); result[i] = val; }
+      else if (operation === 'XOR') { let val = 0; for (const arr of srcArrays) val ^= (i < arr.length ? arr[i] : 0); result[i] = val; }
+    }
+    const resultStr = this.sqliteBytesToString(result);
+    this.evictExpired(destkey);
+    this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'string', NULL)").run(destkey, resultStr);
+    return result.length;
+  }
+
+  async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }>): Promise<(number | null)[]> {
+    this.evictExpired(key);
+    this.ensureStringTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    let current: string;
+    let existingExpiresAt: number | null;
+    if (!row) { current = ''; existingExpiresAt = null; } else { current = row.value; existingExpiresAt = row.expires_at; }
+    const bytes = this.sqliteStringToBytes(current);
+    const results: (number | null)[] = [];
+    let currentOverflow: 'WRAP' | 'SAT' | 'FAIL' = 'WRAP';
+
+    for (const op of operations) {
+      if (op.type !== 'GET' && op.overflow) currentOverflow = op.overflow;
+      const isSigned = op.encoding.toLowerCase().startsWith('i');
+      const bits = parseInt(op.encoding.slice(1));
+      if (bits < 1 || bits > 64) throw new Error('ERR invalid bitfield encoding');
+      const maxUnsigned = Math.pow(2, bits) - 1;
+      const maxSigned = Math.pow(2, bits - 1) - 1;
+      const minSigned = -Math.pow(2, bits - 1);
+
+      const applyOverflow = (val: number): number | null => {
+        if (isSigned) {
+          if (val > maxSigned || val < minSigned) {
+            if (currentOverflow === 'FAIL') return null;
+            if (currentOverflow === 'SAT') return val > maxSigned ? maxSigned : val < minSigned ? minSigned : val;
+            const range = Math.pow(2, bits);
+            return ((val + Math.pow(2, bits - 1)) % range + range) % range - Math.pow(2, bits - 1);
+          }
+          return val;
+        } else {
+          if (val < 0 || val > maxUnsigned) {
+            if (currentOverflow === 'FAIL') return null;
+            if (currentOverflow === 'SAT') return val < 0 ? 0 : val > maxUnsigned ? maxUnsigned : val;
+            return ((val % (maxUnsigned + 1)) + (maxUnsigned + 1)) % (maxUnsigned + 1);
+          }
+          return val;
+        }
+      };
+
+      if (op.type === 'GET') {
+        let val = 0;
+        for (let b = 0; b < bits; b++) {
+          const bitPos = op.offset + b;
+          const byteIdx = Math.floor(bitPos / 8);
+          const bitIdx = 7 - (bitPos % 8);
+          if (byteIdx < bytes.length) val = (val << 1) | ((bytes[byteIdx] >> bitIdx) & 1);
+          else val = val << 1;
+        }
+        if (isSigned && val > maxSigned) val = val - Math.pow(2, bits);
+        results.push(val);
+      } else if (op.type === 'SET') {
+        let oldVal = 0;
+        for (let b = 0; b < bits; b++) {
+          const bitPos = op.offset + b;
+          const byteIdx = Math.floor(bitPos / 8);
+          const bitIdx = 7 - (bitPos % 8);
+          if (byteIdx < bytes.length) oldVal = (oldVal << 1) | ((bytes[byteIdx] >> bitIdx) & 1);
+        }
+        if (isSigned && oldVal > maxSigned) oldVal = oldVal - Math.pow(2, bits);
+        const setValue = op.value!;
+        let writeVal = isSigned ? (setValue < 0 ? setValue + Math.pow(2, bits) : setValue) : (setValue < 0 ? setValue + Math.pow(2, bits) : setValue);
+        for (let b = bits - 1; b >= 0; b--) {
+          const bitPos = op.offset + b;
+          const byteIdx = Math.floor(bitPos / 8);
+          const bitIdx = 7 - (bitPos % 8);
+          while (bytes.length <= byteIdx) bytes.push(0);
+          const bit = (writeVal >> (bits - 1 - b)) & 1;
+          if (bit === 1) bytes[byteIdx] |= (1 << bitIdx);
+          else bytes[byteIdx] &= ~(1 << bitIdx);
+        }
+        results.push(oldVal);
+      } else if (op.type === 'INCRBY') {
+        let currentVal = 0;
+        for (let b = 0; b < bits; b++) {
+          const bitPos = op.offset + b;
+          const byteIdx = Math.floor(bitPos / 8);
+          const bitIdx = 7 - (bitPos % 8);
+          if (byteIdx < bytes.length) currentVal = (currentVal << 1) | ((bytes[byteIdx] >> bitIdx) & 1);
+        }
+        if (isSigned && currentVal > maxSigned) currentVal = currentVal - Math.pow(2, bits);
+        const increment = op.value!;
+        const newVal = currentVal + increment;
+        const clampedVal = applyOverflow(newVal);
+        if (clampedVal === null) { results.push(null); continue; }
+        let writeVal = isSigned ? (clampedVal < 0 ? clampedVal + Math.pow(2, bits) : clampedVal) : clampedVal;
+        for (let b = bits - 1; b >= 0; b--) {
+          const bitPos = op.offset + b;
+          const byteIdx = Math.floor(bitPos / 8);
+          const bitIdx = 7 - (bitPos % 8);
+          while (bytes.length <= byteIdx) bytes.push(0);
+          const bit = (writeVal >> (bits - 1 - b)) & 1;
+          if (bit === 1) bytes[byteIdx] |= (1 << bitIdx);
+          else bytes[byteIdx] &= ~(1 << bitIdx);
+        }
+        results.push(clampedVal);
+      }
+    }
+    const newValue = this.sqliteBytesToString(bytes);
+    this.db.prepare('INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, \'string\', ?)').run(key, newValue, existingExpiresAt);
+    return results;
+  }
+
+  async bitfieldRo(key: string, operations: Array<{ type: 'GET'; encoding: string; offset: number }>): Promise<(number | null)[]> {
+    const opsWithOverflow: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }> = operations.map(op => ({ ...op, overflow: 'WRAP' as const }));
+    return this.bitfield(key, opsWithOverflow);
+  }
+
+  // === HyperLogLog operations ===
+
+  async pfadd(key: string, elements: string[]): Promise<number> {
+    this.evictExpired(key);
+    this.ensureHllTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    let registers: Uint8Array;
+    let existingExpiresAt: number | null;
+    if (!row) { registers = new Uint8Array(this.HLL_BYTES); existingExpiresAt = null; }
+    else { registers = this.hllDecode(row.value); existingExpiresAt = row.expires_at; }
+    let changed = false;
+    for (const el of elements) {
+      const hash = this.murmurHash64(el);
+      const idx = this.hllIndex(hash);
+      const rho = this.hllRho(hash);
+      const currentVal = this.read6BitRegister(registers, idx);
+      if (rho > currentVal) { this.write6BitRegister(registers, idx, rho); changed = true; }
+    }
+    if (changed || !row) {
+      this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'hyperloglog', ?)").run(key, this.hllEncode(registers), existingExpiresAt);
+    }
+    return changed ? 1 : 0;
+  }
+
+  async pfcount(keys: string[]): Promise<number> {
+    for (const key of keys) this.evictExpired(key);
+    for (const key of keys) this.ensureHllTypeOrThrow(key);
+    if (keys.length === 0) return 0;
+    if (keys.length === 1) {
+      const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(keys[0]) as { value: string } | undefined;
+      if (!row) return 0;
+      const registers = this.hllDecode(row.value);
+      return this.hllEstimate(registers);
+    }
+    const merged = new Uint8Array(this.HLL_BYTES);
+    for (const key of keys) {
+      const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+      if (!row) continue;
+      const registers = this.hllDecode(row.value);
+      for (let i = 0; i < this.HLL_REGISTERS; i++) {
+        const val = this.read6BitRegister(registers, i);
+        const currentVal = this.read6BitRegister(merged, i);
+        if (val > currentVal) this.write6BitRegister(merged, i, val);
+      }
+    }
+    return this.hllEstimate(merged);
+  }
+
+  async pfmerge(destkey: string, sourceKeys: string[]): Promise<void> {
+    this.evictExpired(destkey);
+    for (const key of sourceKeys) this.evictExpired(key);
+    for (const key of sourceKeys) this.ensureHllTypeOrThrow(key);
+    this.ensureHllTypeOrThrow(destkey);
+    const merged = new Uint8Array(this.HLL_BYTES);
+    for (const key of sourceKeys) {
+      const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+      if (!row) continue;
+      const registers = this.hllDecode(row.value);
+      for (let i = 0; i < this.HLL_REGISTERS; i++) {
+        const val = this.read6BitRegister(registers, i);
+        const currentVal = this.read6BitRegister(merged, i);
+        if (val > currentVal) this.write6BitRegister(merged, i, val);
+      }
+    }
+    this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'hyperloglog', NULL)").run(destkey, this.hllEncode(merged));
+  }
+
+  // === JSON operations ===
+
+  async jsonSet(key: string, path: string, value: string, nx?: boolean, xx?: boolean): Promise<string | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    let parsedValue: any;
+    try { parsedValue = JSON.parse(value); } catch { throw new Error('ERR invalid JSON'); }
+
+    if (path === '$' || path === '') {
+      if (nx && this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key)) return null;
+      if (xx && !this.db.prepare('SELECT 1 FROM kv_store WHERE key = ?').get(key)) return null;
+      const row = this.db.prepare('SELECT expires_at FROM kv_store WHERE key = ?').get(key) as { expires_at: number | null } | undefined;
+      this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'json', ?)").run(key, JSON.stringify(parsedValue), row?.expires_at ?? null);
+      return 'OK';
+    }
+
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) {
+      if (xx) return null;
+      this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'json', NULL)").run(key, JSON.stringify(parsedValue));
+      return 'OK';
+    }
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) { if (xx) return null; return null; }
+    if (nx && resolved.length > 0) return null;
+    for (const r of resolved) { if (r.parent !== null) r.parent[r.key] = parsedValue; }
+    this.db.prepare('INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, \'json\', ?)').run(key, JSON.stringify(root), row.expires_at);
+    return 'OK';
+  }
+
+  async jsonGet(key: string, paths?: string[]): Promise<string | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return null;
+    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    if (typeRow && typeRow.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    if (!paths || paths.length === 0) return row.value;
+    if (paths.length === 1) {
+      const resolved = this.sqliteJsonResolvePath(root, paths[0]);
+      if (resolved.length === 0) return null;
+      return JSON.stringify(resolved[0].value);
+    }
+    const result: Record<string, any> = {};
+    for (const p of paths) {
+      const resolved = this.sqliteJsonResolvePath(root, p);
+      result[p] = resolved.length === 0 ? null : resolved[0].value;
+    }
+    return JSON.stringify(result);
+  }
+
+  async jsonDel(key: string, path?: string): Promise<number> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return 0;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (!path || path === '$') { this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key); return 1; }
+    const fullRow = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!fullRow) return 0;
+    let root = JSON.parse(fullRow.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return 0;
+    let count = 0;
+    for (let i = resolved.length - 1; i >= 0; i--) {
+      const r = resolved[i];
+      if (r.parent !== null) {
+        if (Array.isArray(r.parent)) r.parent.splice(r.key as number, 1);
+        else delete r.parent[r.key as string];
+        count++;
+      }
+    }
+    if (count > 0) this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return count;
+  }
+
+  async jsonType(key: string, path?: string): Promise<string | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    if (!path || path === '$') return this.sqliteJsonTypeOf(root);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return null;
+    return this.sqliteJsonTypeOf(resolved[0].value);
+  }
+
+  async jsonStrlen(key: string, path?: string): Promise<number | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    const effectivePath = path || '$';
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    if (typeof resolved[0].value === 'string') return resolved[0].value.length;
+    return null;
+  }
+
+  async jsonStrappend(key: string, path: string, value: string): Promise<number | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) throw new Error('ERR key not found');
+    let root = JSON.parse(row.value);
+    let appendString: string;
+    try { appendString = JSON.parse(value); } catch { throw new Error('ERR invalid JSON'); }
+    if (typeof appendString !== 'string') throw new Error('ERR value is not a string');
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return null;
+    for (const r of resolved) {
+      if (typeof r.value === 'string') {
+        if (r.parent !== null) r.parent[r.key] = r.value + appendString;
+        else root = root + appendString;
+      }
+    }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    const newResolved = this.sqliteJsonResolvePath(root, path);
+    if (newResolved.length > 0 && typeof newResolved[0].value === 'string') return newResolved[0].value.length;
+    return null;
+  }
+
+  async jsonObjkeys(key: string, path?: string): Promise<string[] | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    const effectivePath = path || '$';
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    const val = resolved[0].value;
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) return Object.keys(val);
+    return null;
+  }
+
+  async jsonObjlen(key: string, path?: string): Promise<number | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    const effectivePath = path || '$';
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    const val = resolved[0].value;
+    if (val !== null && typeof val === 'object' && !Array.isArray(val)) return Object.keys(val).length;
+    return null;
+  }
+
+  async jsonArrappend(key: string, path: string, values: string[]): Promise<(number | null)[]> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) throw new Error('ERR key not found');
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    const results: (number | null)[] = [];
+    const parsedValues: any[] = values.map(v => { try { return JSON.parse(v); } catch { return v; } });
+    for (const r of resolved) {
+      if (Array.isArray(r.value)) { r.value.push(...parsedValues); if (r.parent !== null) r.parent[r.key] = r.value; results.push(r.value.length); }
+      else results.push(null);
+    }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return results;
+  }
+
+  async jsonArrpop(key: string, path?: string, index?: number): Promise<string | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) return null;
+    const effectivePath = path || '$';
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    const r = resolved[0];
+    if (!Array.isArray(r.value)) return null;
+    const arr = r.value;
+    let idx = index ?? -1;
+    if (idx < 0) idx = arr.length + idx;
+    if (idx < 0 || idx >= arr.length) return null;
+    const popped = arr.splice(idx, 1)[0];
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return JSON.stringify(popped);
+  }
+
+  async jsonArrlen(key: string, path?: string): Promise<number | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    const effectivePath = path || '$';
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    if (Array.isArray(resolved[0].value)) return resolved[0].value.length;
+    return null;
+  }
+
+  async jsonArrindex(key: string, path: string, value: string, start?: number, stop?: number): Promise<number | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
+    if (!row) return null;
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return null;
+    if (!Array.isArray(resolved[0].value)) return null;
+    let searchValue: any;
+    try { searchValue = JSON.parse(value); } catch { searchValue = value; }
+    const arr = resolved[0].value as any[];
+    const s = start ?? 0, effectiveStop = stop ?? 0;
+    for (let i = s; i < arr.length; i++) {
+      if (effectiveStop > 0 && i > effectiveStop) break;
+      if (JSON.stringify(arr[i]) === JSON.stringify(searchValue)) return i;
+    }
+    return -1;
+  }
+
+  async jsonArrinsert(key: string, path: string, index: number, values: string[]): Promise<(number | null)[]> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) throw new Error('ERR key not found');
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    const results: (number | null)[] = [];
+    const parsedValues: any[] = values.map(v => { try { return JSON.parse(v); } catch { return v; } });
+    for (const r of resolved) {
+      if (Array.isArray(r.value)) { r.value.splice(index, 0, ...parsedValues); results.push(r.value.length); }
+      else results.push(null);
+    }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return results;
+  }
+
+  async jsonArrtrim(key: string, path: string, start: number, stop: number): Promise<number | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) return null;
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return null;
+    const r = resolved[0];
+    if (!Array.isArray(r.value)) return null;
+    let s = start, e = stop;
+    if (s < 0) s = r.value.length + s;
+    if (e < 0) e = r.value.length + e;
+    if (s < 0) s = 0;
+    if (e >= r.value.length) e = r.value.length - 1;
+    if (s > e) r.value.length = 0;
+    else { r.value.splice(0, s); r.value.splice(e - s + 1); }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return r.value.length;
+  }
+
+  async jsonNumincrby(key: string, path: string, increment: number): Promise<string | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) return null;
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return null;
+    for (const r of resolved) {
+      if (typeof r.value === 'number') {
+        const newVal = r.value + increment;
+        if (r.parent !== null) r.parent[r.key] = newVal;
+        else root = newVal;
+      }
+    }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    const newResolved = this.sqliteJsonResolvePath(root, path);
+    if (newResolved.length > 0 && typeof newResolved[0].value === 'number') return String(newResolved[0].value);
+    return null;
+  }
+
+  async jsonNummultby(key: string, path: string, multiplier: number): Promise<string | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) return null;
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, path);
+    if (resolved.length === 0) return null;
+    for (const r of resolved) {
+      if (typeof r.value === 'number') {
+        const newVal = r.value * multiplier;
+        if (r.parent !== null) r.parent[r.key] = newVal;
+        else root = newVal;
+      }
+    }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    const newResolved = this.sqliteJsonResolvePath(root, path);
+    if (newResolved.length > 0 && typeof newResolved[0].value === 'number') return String(newResolved[0].value);
+    return null;
+  }
+
+  async jsonMget(keys: string[], path: string): Promise<(string | null)[]> {
+    const results: (string | null)[] = [];
+    for (const key of keys) {
+      this.evictExpired(key);
+      const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+      if (!row || row.type !== 'json') { results.push(null); continue; }
+      const root = JSON.parse(row.value);
+      const resolved = this.sqliteJsonResolvePath(root, path);
+      results.push(resolved.length === 0 ? null : JSON.stringify(resolved[0].value));
+    }
+    return results;
+  }
+
+  async jsonMset(pairs: Array<{ key: string; path: string; value: string }>): Promise<void> {
+    for (const { key, path, value } of pairs) await this.jsonSet(key, path, value);
+  }
+
+  async jsonToggle(key: string, path?: string): Promise<string | null> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) return null;
+    const effectivePath = path || '$';
+    let root = JSON.parse(row.value);
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    let result: string | null = null;
+    for (const r of resolved) {
+      if (typeof r.value === 'boolean') {
+        const newVal = !r.value;
+        if (r.parent !== null) r.parent[r.key] = newVal;
+        else root = newVal;
+        result = String(newVal);
+      }
+    }
+    if (result !== null) this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return result;
+  }
+
+  async jsonClear(key: string, path?: string): Promise<number> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) return 0;
+    const effectivePath = path || '$';
+    let root = JSON.parse(row.value);
+    if (effectivePath === '$' || effectivePath === '') {
+      if (Array.isArray(root)) root = [];
+      else if (typeof root === 'object' && root !== null) root = {};
+      else if (typeof root === 'string') root = '';
+      else if (typeof root === 'number') root = 0;
+      this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+      return 1;
+    }
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    let count = 0;
+    for (const r of resolved) {
+      if (Array.isArray(r.value)) { r.parent[r.key] = []; count++; }
+      else if (typeof r.value === 'object' && r.value !== null) { r.parent[r.key] = {}; count++; }
+      else if (typeof r.value === 'string') { r.parent[r.key] = ''; count++; }
+      else if (typeof r.value === 'number') { r.parent[r.key] = 0; count++; }
+    }
+    if (count > 0) this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+    return count;
+  }
+
+  async jsonDebugMemory(key: string, path?: string): Promise<number | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    const effectivePath = path || '$';
+    if (effectivePath === '$' || effectivePath === '') return row.value.length;
+    const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+    if (resolved.length === 0) return null;
+    return JSON.stringify(resolved[0].value).length;
+  }
+
+  async jsonResp(key: string, path?: string): Promise<string | null> {
+    this.evictExpired(key);
+    const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
+    if (!row) return null;
+    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    const root = JSON.parse(row.value);
+    const effectivePath = path || '$';
+    let val: any;
+    if (effectivePath === '$' || effectivePath === '') val = root;
+    else {
+      const resolved = this.sqliteJsonResolvePath(root, effectivePath);
+      if (resolved.length === 0) return null;
+      val = resolved[0].value;
+    }
+    const serializeResp = (v: any): string => {
+      if (v === null) return 'null';
+      if (typeof v === 'boolean') return v ? '1' : '0';
+      if (typeof v === 'number') { if (Number.isInteger(v)) return ':' + v; return '$' + v; }
+      if (typeof v === 'string') return '$' + v.length + '\n' + v;
+      if (Array.isArray(v)) return '*' + v.length + '\n' + v.map(serializeResp).join('\n');
+      if (typeof v === 'object') {
+        const keys = Object.keys(v);
+        return '*' + (keys.length * 2) + '\n' + keys.flatMap(k => [serializeResp(k), serializeResp(v[k])]).join('\n');
+      }
+      return String(v);
+    };
+    return serializeResp(val);
+  }
+
+  async jsonMerge(key: string, path: string, value: string): Promise<void> {
+    this.evictExpired(key);
+    this.ensureJsonTypeOrThrow(key);
+    let parsedValue: any;
+    try { parsedValue = JSON.parse(value); } catch { throw new Error('ERR invalid JSON'); }
+    const row = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
+    if (!row) {
+      this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, ?, 'json', NULL)").run(key, JSON.stringify(parsedValue));
+      return;
+    }
+    let root = JSON.parse(row.value);
+    if (path === '$' || path === '') root = this.sqliteDeepMerge(root, parsedValue);
+    else {
+      const resolved = this.sqliteJsonResolvePath(root, path);
+      for (const r of resolved) {
+        if (r.parent !== null) r.parent[r.key] = this.sqliteDeepMerge(r.value, parsedValue);
+        else root = this.sqliteDeepMerge(root, parsedValue);
+      }
+    }
+    this.db.prepare('UPDATE kv_store SET value = ? WHERE key = ?').run(JSON.stringify(root), key);
+  }
+
+
+
   // === Server / Persistence ===
 
   async save(): Promise<void> {

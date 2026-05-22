@@ -314,6 +314,46 @@ export class CommandHandler {
         case 'BZMPOP': return await this.handleBzmpop(args.slice(1));
         case 'ZMPOP': return await this.handleZmpop(args.slice(1));
 
+        // Bitmap operations
+        case 'SETBIT': return await this.handleSetbit(args.slice(1));
+        case 'GETBIT': return await this.handleGetbit(args.slice(1));
+        case 'BITCOUNT': return await this.handleBitcount(args.slice(1));
+        case 'BITPOS': return await this.handleBitpos(args.slice(1));
+        case 'BITOP': return await this.handleBitop(args.slice(1));
+        case 'BITFIELD': return await this.handleBitfield(args.slice(1));
+        case 'BITFIELD_RO': return await this.handleBitfieldRo(args.slice(1));
+
+        // HyperLogLog operations
+        case 'PFADD': return await this.handlePfadd(args.slice(1));
+        case 'PFCOUNT': return await this.handlePfcount(args.slice(1));
+        case 'PFMERGE': return await this.handlePfmerge(args.slice(1));
+
+        // JSON operations
+        case 'JSON.SET': return await this.handleJsonSet(args.slice(1));
+        case 'JSON.GET': return await this.handleJsonGet(args.slice(1));
+        case 'JSON.DEL': return await this.handleJsonDel(args.slice(1));
+        case 'JSON.FORGET': return await this.handleJsonForget(args.slice(1));
+        case 'JSON.TYPE': return await this.handleJsonType(args.slice(1));
+        case 'JSON.STRLEN': return await this.handleJsonStrlen(args.slice(1));
+        case 'JSON.STRAPPEND': return await this.handleJsonStrappend(args.slice(1));
+        case 'JSON.OBJKEYS': return await this.handleJsonObjkeys(args.slice(1));
+        case 'JSON.OBJLEN': return await this.handleJsonObjlen(args.slice(1));
+        case 'JSON.ARRAPPEND': return await this.handleJsonArrappend(args.slice(1));
+        case 'JSON.ARRINDEX': return await this.handleJsonArrindex(args.slice(1));
+        case 'JSON.ARRINSERT': return await this.handleJsonArrinsert(args.slice(1));
+        case 'JSON.ARRLEN': return await this.handleJsonArrlen(args.slice(1));
+        case 'JSON.ARRPOP': return await this.handleJsonArrpop(args.slice(1));
+        case 'JSON.ARRTRIM': return await this.handleJsonArrtrim(args.slice(1));
+        case 'JSON.NUMINCRBY': return await this.handleJsonNumincrby(args.slice(1));
+        case 'JSON.NUMMULTBY': return await this.handleJsonNummultby(args.slice(1));
+        case 'JSON.MGET': return await this.handleJsonMget(args.slice(1));
+        case 'JSON.MSET': return await this.handleJsonMset(args.slice(1));
+        case 'JSON.TOGGLE': return await this.handleJsonToggle(args.slice(1));
+        case 'JSON.CLEAR': return await this.handleJsonClear(args.slice(1));
+        case 'JSON.DEBUG': return await this.handleJsonDebug(args.slice(1));
+        case 'JSON.RESP': return await this.handleJsonResp(args.slice(1));
+        case 'JSON.MERGE': return await this.handleJsonMerge(args.slice(1));
+
         default:
           return encodeError(`unknown command '${args[0]}'`);
       }
@@ -544,6 +584,17 @@ export class CommandHandler {
       'ZRANGESTORE', 'ZDIFF', 'ZDIFFSTORE', 'ZUNION', 'ZUNIONSTORE',
       'ZINTER', 'ZINTERSTORE', 'ZINTERCARD',
       'BZPOPMAX', 'BZPOPMIN', 'BZMPOP', 'ZMPOP',
+      // Bitmap
+      'SETBIT', 'GETBIT', 'BITCOUNT', 'BITPOS', 'BITOP', 'BITFIELD', 'BITFIELD_RO',
+      // HyperLogLog
+      'PFADD', 'PFCOUNT', 'PFMERGE',
+      // JSON
+      'JSON.SET', 'JSON.GET', 'JSON.DEL', 'JSON.FORGET', 'JSON.TYPE',
+      'JSON.STRLEN', 'JSON.STRAPPEND', 'JSON.OBJKEYS', 'JSON.OBJLEN',
+      'JSON.ARRAPPEND', 'JSON.ARRINDEX', 'JSON.ARRINSERT', 'JSON.ARRLEN',
+      'JSON.ARRPOP', 'JSON.ARRTRIM', 'JSON.NUMINCRBY', 'JSON.NUMMULTBY',
+      'JSON.MGET', 'JSON.MSET', 'JSON.TOGGLE', 'JSON.CLEAR',
+      'JSON.DEBUG', 'JSON.RESP', 'JSON.MERGE',
     ];
   }
 
@@ -929,6 +980,47 @@ export class CommandHandler {
         case 'BZPOPMIN': return await this.handleBzpopmin(args.slice(1));
         case 'BZMPOP': return await this.handleBzmpop(args.slice(1));
         case 'ZMPOP': return await this.handleZmpop(args.slice(1));
+
+        // Bitmap operations
+        case 'SETBIT': return await this.handleSetbit(args.slice(1));
+        case 'GETBIT': return await this.handleGetbit(args.slice(1));
+        case 'BITCOUNT': return await this.handleBitcount(args.slice(1));
+        case 'BITPOS': return await this.handleBitpos(args.slice(1));
+        case 'BITOP': return await this.handleBitop(args.slice(1));
+        case 'BITFIELD': return await this.handleBitfield(args.slice(1));
+        case 'BITFIELD_RO': return await this.handleBitfieldRo(args.slice(1));
+
+        // HyperLogLog operations
+        case 'PFADD': return await this.handlePfadd(args.slice(1));
+        case 'PFCOUNT': return await this.handlePfcount(args.slice(1));
+        case 'PFMERGE': return await this.handlePfmerge(args.slice(1));
+
+        // JSON operations
+        case 'JSON.SET': return await this.handleJsonSet(args.slice(1));
+        case 'JSON.GET': return await this.handleJsonGet(args.slice(1));
+        case 'JSON.DEL': return await this.handleJsonDel(args.slice(1));
+        case 'JSON.FORGET': return await this.handleJsonForget(args.slice(1));
+        case 'JSON.TYPE': return await this.handleJsonType(args.slice(1));
+        case 'JSON.STRLEN': return await this.handleJsonStrlen(args.slice(1));
+        case 'JSON.STRAPPEND': return await this.handleJsonStrappend(args.slice(1));
+        case 'JSON.OBJKEYS': return await this.handleJsonObjkeys(args.slice(1));
+        case 'JSON.OBJLEN': return await this.handleJsonObjlen(args.slice(1));
+        case 'JSON.ARRAPPEND': return await this.handleJsonArrappend(args.slice(1));
+        case 'JSON.ARRINDEX': return await this.handleJsonArrindex(args.slice(1));
+        case 'JSON.ARRINSERT': return await this.handleJsonArrinsert(args.slice(1));
+        case 'JSON.ARRLEN': return await this.handleJsonArrlen(args.slice(1));
+        case 'JSON.ARRPOP': return await this.handleJsonArrpop(args.slice(1));
+        case 'JSON.ARRTRIM': return await this.handleJsonArrtrim(args.slice(1));
+        case 'JSON.NUMINCRBY': return await this.handleJsonNumincrby(args.slice(1));
+        case 'JSON.NUMMULTBY': return await this.handleJsonNummultby(args.slice(1));
+        case 'JSON.MGET': return await this.handleJsonMget(args.slice(1));
+        case 'JSON.MSET': return await this.handleJsonMset(args.slice(1));
+        case 'JSON.TOGGLE': return await this.handleJsonToggle(args.slice(1));
+        case 'JSON.CLEAR': return await this.handleJsonClear(args.slice(1));
+        case 'JSON.DEBUG': return await this.handleJsonDebug(args.slice(1));
+        case 'JSON.RESP': return await this.handleJsonResp(args.slice(1));
+        case 'JSON.MERGE': return await this.handleJsonMerge(args.slice(1));
+
         default: return encodeError(`unknown command '${args[0]}'`);
       }
     } catch (e: any) {
@@ -3519,5 +3611,417 @@ export class CommandHandler {
     }
     const elementsEncoded = encodeArray(flat);
     return `*2\r\n${keyEncoded}${elementsEncoded}`;
+  }
+
+  // === Bitmap operations ===
+
+  private async handleSetbit(args: string[]): Promise<string> {
+    if (args.length !== 3) return encodeError("wrong number of arguments for 'SETBIT' command");
+    const key = args[0];
+    const offset = parseInt(args[1]);
+    const value = parseInt(args[2]);
+    if (isNaN(offset) || offset < 0) return encodeError('ERR bit offset is not an integer or out of range');
+    if (value !== 0 && value !== 1) return encodeError('ERR bit is not an integer or out of range');
+    const result = await this.storage.setbit(key, offset, value as 0 | 1);
+    return encodeInteger(result);
+  }
+
+  private async handleGetbit(args: string[]): Promise<string> {
+    if (args.length !== 2) return encodeError("wrong number of arguments for 'GETBIT' command");
+    const offset = parseInt(args[1]);
+    if (isNaN(offset) || offset < 0) return encodeError('ERR bit offset is not an integer or out of range');
+    const result = await this.storage.getbit(args[0], offset);
+    return encodeInteger(result);
+  }
+
+  private async handleBitcount(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'BITCOUNT' command");
+    let start: number | undefined;
+    let end: number | undefined;
+    if (args.length >= 2) {
+      start = parseInt(args[1]);
+      if (isNaN(start)) return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length >= 3) {
+      end = parseInt(args[2]);
+      if (isNaN(end)) return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.bitcount(args[0], start, end);
+    return encodeInteger(result);
+  }
+
+  private async handleBitpos(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'BITPOS' command");
+    const bit = parseInt(args[1]);
+    if (bit !== 0 && bit !== 1) return encodeError('ERR bit is not an integer or out of range');
+    let start: number | undefined;
+    let end: number | undefined;
+    if (args.length >= 3) {
+      start = parseInt(args[2]);
+      if (isNaN(start)) return encodeError('ERR value is not an integer or out of range');
+    }
+    if (args.length >= 4) {
+      end = parseInt(args[3]);
+      if (isNaN(end)) return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.bitpos(args[0], bit as 0 | 1, start, end);
+    return encodeInteger(result);
+  }
+
+  private async handleBitop(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'BITOP' command");
+    const operation = args[0].toUpperCase() as 'AND' | 'OR' | 'XOR' | 'NOT';
+    if (!['AND', 'OR', 'XOR', 'NOT'].includes(operation)) return encodeError('ERR syntax error');
+    const destkey = args[1];
+    const keys = args.slice(2);
+    if (operation === 'NOT' && keys.length !== 1) return encodeError('ERR BITOP NOT requires exactly one source key');
+    const result = await this.storage.bitop(operation, destkey, keys);
+    return encodeInteger(result);
+  }
+
+  private async handleBitfield(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'BITFIELD' command");
+    const key = args[0];
+    const operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }> = [];
+    let currentOverflow: 'WRAP' | 'SAT' | 'FAIL' = 'WRAP';
+    let i = 1;
+    while (i < args.length) {
+      const cmd = args[i].toUpperCase();
+      if (cmd === 'OVERFLOW') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const mode = args[i].toUpperCase();
+        if (!['WRAP', 'SAT', 'FAIL'].includes(mode)) return encodeError('ERR syntax error');
+        currentOverflow = mode as 'WRAP' | 'SAT' | 'FAIL';
+        i++;
+        continue;
+      }
+      if (cmd === 'GET') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const encoding = args[i].toUpperCase();
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        operations.push({ type: 'GET', encoding, offset, overflow: currentOverflow });
+        i++;
+      } else if (cmd === 'SET') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const encoding = args[i].toUpperCase();
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const value = parseInt(args[i]);
+        if (isNaN(value)) return encodeError('ERR value is not an integer or out of range');
+        operations.push({ type: 'SET', encoding, offset, value, overflow: currentOverflow });
+        i++;
+      } else if (cmd === 'INCRBY') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const encoding = args[i].toUpperCase();
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const increment = parseInt(args[i]);
+        if (isNaN(increment)) return encodeError('ERR value is not an integer or out of range');
+        operations.push({ type: 'INCRBY', encoding, offset, value: increment, overflow: currentOverflow });
+        i++;
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+    const result = await this.storage.bitfield(key, operations);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleBitfieldRo(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'BITFIELD_RO' command");
+    const key = args[0];
+    const operations: Array<{ type: 'GET'; encoding: string; offset: number }> = [];
+    let i = 1;
+    while (i < args.length) {
+      const cmd = args[i].toUpperCase();
+      if (cmd === 'GET') {
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const encoding = args[i].toUpperCase();
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+        const offset = parseInt(args[i]);
+        if (isNaN(offset)) return encodeError('ERR value is not an integer or out of range');
+        operations.push({ type: 'GET', encoding, offset });
+        i++;
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+    const result = await this.storage.bitfieldRo(key, operations);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  // === HyperLogLog operations ===
+
+  private async handlePfadd(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'PFADD' command");
+    const key = args[0];
+    const elements = args.slice(1);
+    const result = await this.storage.pfadd(key, elements);
+    return encodeInteger(result);
+  }
+
+  private async handlePfcount(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'PFCOUNT' command");
+    const result = await this.storage.pfcount(args);
+    return encodeInteger(result);
+  }
+
+  private async handlePfmerge(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'PFMERGE' command");
+    const destkey = args[0];
+    const sourceKeys = args.slice(1);
+    await this.storage.pfmerge(destkey, sourceKeys);
+    return encodeSimpleString('OK');
+  }
+
+  // === JSON operations ===
+
+  private async handleJsonSet(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.SET' command");
+    const key = args[0];
+    const path = args[1];
+    const value = args[2];
+    let nx = false, xx = false;
+    for (let i = 3; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'NX') nx = true;
+      else if (opt === 'XX') xx = true;
+      else return encodeError('ERR syntax error');
+    }
+    const result = await this.storage.jsonSet(key, path, value, nx || undefined, xx || undefined);
+    if (result === null) return encodeBulkString(null);
+    return encodeSimpleString('OK');
+  }
+
+  private async handleJsonGet(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.GET' command");
+    const key = args[0];
+    const paths = args.length > 1 ? args.slice(1) : undefined;
+    const result = await this.storage.jsonGet(key, paths);
+    return encodeBulkString(result);
+  }
+
+  private async handleJsonDel(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.DEL' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonDel(args[0], path);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonForget(args: string[]): Promise<string> {
+    return this.handleJsonDel(args);
+  }
+
+  private async handleJsonType(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.TYPE' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonType(args[0], path);
+    if (result === null) return encodeBulkString(null);
+    return encodeSimpleString(result);
+  }
+
+  private async handleJsonStrlen(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.STRLEN' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonStrlen(args[0], path);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonStrappend(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.STRAPPEND' command");
+    const key = args[0];
+    const path = args[1];
+    const value = args[2];
+    const result = await this.storage.jsonStrappend(key, path, value);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonObjkeys(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.OBJKEYS' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonObjkeys(args[0], path);
+    if (result === null) return encodeArray(null);
+    return encodeArray(result);
+  }
+
+  private async handleJsonObjlen(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.OBJLEN' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonObjlen(args[0], path);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonArrappend(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.ARRAPPEND' command");
+    const key = args[0];
+    const path = args[1];
+    const values = args.slice(2);
+    const result = await this.storage.jsonArrappend(key, path, values);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleJsonArrindex(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.ARRINDEX' command");
+    const key = args[0];
+    const path = args[1];
+    const value = args[2];
+    let start: number | undefined;
+    let stop: number | undefined;
+    if (args.length >= 4) { start = parseInt(args[3]); if (isNaN(start)) return encodeError('ERR value is not an integer or out of range'); }
+    if (args.length >= 5) { stop = parseInt(args[4]); if (isNaN(stop)) return encodeError('ERR value is not an integer or out of range'); }
+    const result = await this.storage.jsonArrindex(key, path, value, start, stop);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonArrinsert(args: string[]): Promise<string> {
+    if (args.length < 4) return encodeError("wrong number of arguments for 'JSON.ARRINSERT' command");
+    const key = args[0];
+    const path = args[1];
+    const index = parseInt(args[2]);
+    if (isNaN(index)) return encodeError('ERR value is not an integer or out of range');
+    const values = args.slice(3);
+    const result = await this.storage.jsonArrinsert(key, path, index, values);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleJsonArrlen(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.ARRLEN' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonArrlen(args[0], path);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonArrpop(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.ARRPOP' command");
+    const key = args[0];
+    let path: string | undefined;
+    let index: number | undefined;
+    if (args.length >= 2) path = args[1];
+    if (args.length >= 3) {
+      index = parseInt(args[2]);
+      if (isNaN(index)) return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.jsonArrpop(key, path, index);
+    return encodeBulkString(result);
+  }
+
+  private async handleJsonArrtrim(args: string[]): Promise<string> {
+    if (args.length < 4) return encodeError("wrong number of arguments for 'JSON.ARRTRIM' command");
+    const key = args[0];
+    const path = args[1];
+    const start = parseInt(args[2]);
+    const stop = parseInt(args[3]);
+    if (isNaN(start) || isNaN(stop)) return encodeError('ERR value is not an integer or out of range');
+    const result = await this.storage.jsonArrtrim(key, path, start, stop);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonNumincrby(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.NUMINCRBY' command");
+    const key = args[0];
+    const path = args[1];
+    const increment = parseFloat(args[2]);
+    if (isNaN(increment)) return encodeError('ERR value is not a valid float');
+    const result = await this.storage.jsonNumincrby(key, path, increment);
+    return encodeBulkString(result);
+  }
+
+  private async handleJsonNummultby(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.NUMMULTBY' command");
+    const key = args[0];
+    const path = args[1];
+    const multiplier = parseFloat(args[2]);
+    if (isNaN(multiplier)) return encodeError('ERR value is not a valid float');
+    const result = await this.storage.jsonNummultby(key, path, multiplier);
+    return encodeBulkString(result);
+  }
+
+  private async handleJsonMget(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'JSON.MGET' command");
+    const path = args[args.length - 1];
+    const keys = args.slice(0, args.length - 1);
+    const result = await this.storage.jsonMget(keys, path);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleJsonMset(args: string[]): Promise<string> {
+    if (args.length < 3 || args.length % 3 !== 0) return encodeError("wrong number of arguments for 'JSON.MSET' command");
+    const pairs: Array<{ key: string; path: string; value: string }> = [];
+    for (let i = 0; i < args.length; i += 3) {
+      pairs.push({ key: args[i], path: args[i + 1], value: args[i + 2] });
+    }
+    await this.storage.jsonMset(pairs);
+    return encodeSimpleString('OK');
+  }
+
+  private async handleJsonToggle(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.TOGGLE' command");
+    const key = args[0];
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonToggle(key, path);
+    return encodeBulkString(result);
+  }
+
+  private async handleJsonClear(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.CLEAR' command");
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonClear(args[0], path);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonDebug(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.DEBUG' command");
+    const subcmd = args[0].toUpperCase();
+    if (subcmd !== 'MEMORY') return encodeError('unknown subcommand');
+    if (args.length < 2) return encodeError("wrong number of arguments for 'JSON.DEBUG MEMORY' command");
+    const key = args[1];
+    const path = args.length > 2 ? args[2] : undefined;
+    const result = await this.storage.jsonDebugMemory(key, path);
+    if (result === null) return encodeBulkString(null);
+    return encodeInteger(result);
+  }
+
+  private async handleJsonResp(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.RESP' command");
+    const key = args[0];
+    const path = args.length > 1 ? args[1] : undefined;
+    const result = await this.storage.jsonResp(key, path);
+    return result ?? encodeBulkString(null);
+  }
+
+  private async handleJsonMerge(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'JSON.MERGE' command");
+    const key = args[0];
+    const path = args[1];
+    const value = args[2];
+    await this.storage.jsonMerge(key, path, value);
+    return encodeSimpleString('OK');
   }
 }
