@@ -259,4 +259,195 @@ describe('SqliteStorage', () => {
       }
     });
   });
+
+  describe('GEO 명령어 — SqliteStorage', () => {
+    it('GEOADD로 위치를 추가한다', async () => {
+      const result = await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      expect(result).toBe(2);
+    });
+
+    it('GEOADD 중복 멤버는 스코어를 갱신한다', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geoadd('cities', [{ longitude: 15.087269, latitude: 37.502669, member: 'Palermo' }]);
+      expect(result).toBe(0);
+    });
+
+    it('GEOADD with CH 옵션', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geoadd('cities', [{ longitude: 14.361389, latitude: 39.115556, member: 'Palermo' }], { ch: true });
+      expect(result).toBe(1);
+    });
+
+    it('GEOADD with NX 옵션은 기존 멤버를 건너뛴다', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geoadd('cities', [{ longitude: 15, latitude: 37, member: 'Palermo' }], { nx: true });
+      expect(result).toBe(0);
+    });
+
+    it('GEOADD with XX 옵션은 기존 멤버만 갱신한다', async () => {
+      const result = await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }], { xx: true });
+      expect(result).toBe(0);
+    });
+
+    it('GEOADD 잘못된 경도는 에러를 던진다', async () => {
+      await expect(storage.geoadd('cities', [{ longitude: 181, latitude: 38, member: 'm' }])).rejects.toThrow();
+    });
+
+    it('GEOHASH로 geohash 문자열을 반환한다', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geohash('cities', ['Palermo']);
+      expect(result[0]).not.toBeNull();
+    });
+
+    it('GEOHASH 존재하지 않는 멤버는 null', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geohash('cities', ['Unknown']);
+      expect(result[0]).toBeNull();
+    });
+
+    it('GEOPOS로 멤버의 경도/위도를 반환한다', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geopos('cities', ['Palermo']);
+      expect(result[0]).not.toBeNull();
+      expect(result[0]![0]).toBeCloseTo(13.361389, 1);
+      expect(result[0]![1]).toBeCloseTo(38.115556, 1);
+    });
+
+    it('GEOPOS 존재하지 않는 멤버는 null', async () => {
+      const result = await storage.geopos('cities', ['Unknown']);
+      expect(result[0]).toBeNull();
+    });
+
+    it('GEODIST로 두 멤버 간 거리를 반환한다', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const dist = await storage.geodist('cities', 'Palermo', 'Catania', 'km');
+      expect(dist).not.toBeNull();
+      expect(dist!).toBeGreaterThan(150);
+      expect(dist!).toBeLessThan(200);
+    });
+
+    it('GEODIST 존재하지 않는 멤버는 null', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const result = await storage.geodist('cities', 'Palermo', 'Unknown', 'km');
+      expect(result).toBeNull();
+    });
+
+    it('GEORADIUS로 반경 내 멤버를 검색한다', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const results = await storage.georadius('cities', 13.361389, 38.115556, 200, 'km');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results.some(r => r.member === 'Palermo')).toBe(true);
+    });
+
+    it('GEORADIUSBYMEMBER로 멤버 기반 반경 검색한다', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const results = await storage.georadiusbymember('cities', 'Palermo', 200, 'km');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('GEOSEARCH BYRADIUS로 반경 검색한다', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const results = await storage.geosearch('cities', {
+        fromLongitude: 13.361389, fromLatitude: 38.115556,
+        byRadius: { radius: 200, unit: 'km' },
+      });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('GEOSEARCH FROMMEMBER로 검색한다', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const results = await storage.geosearch('cities', {
+        fromMember: 'Palermo',
+        byRadius: { radius: 200, unit: 'km' },
+      });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('GEOSEARCH BYBOX로 사각형 검색한다', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const results = await storage.geosearch('cities', {
+        fromLongitude: 13.361389, fromLatitude: 38.115556,
+        byBox: { width: 400, height: 400, unit: 'km' },
+      });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('GEOSEARCH withDist 옵션', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const results = await storage.geosearch('cities', {
+        fromMember: 'Palermo',
+        byRadius: { radius: 200, unit: 'km' },
+        withDist: true,
+      });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].distance).toBeDefined();
+    });
+
+    it('GEOSEARCH withCoord 옵션', async () => {
+      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      const results = await storage.geosearch('cities', {
+        fromMember: 'Palermo',
+        byRadius: { radius: 200, unit: 'km' },
+        withCoord: true,
+      });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].longitude).toBeDefined();
+      expect(results[0].latitude).toBeDefined();
+    });
+
+    it('GEOSEARCHSTORE로 검색 결과를 저장한다', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      const count = await storage.geosearchstore('nearby', 'cities', {
+        fromMember: 'Palermo',
+        byRadius: { radius: 200, unit: 'km' },
+      });
+      expect(count).toBeGreaterThanOrEqual(1);
+      const type = await storage.type('nearby');
+      expect(type).toBe('zset');
+    });
+
+    it('GEORADIUS with STORE 옵션', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      await storage.georadius('cities', 13.361389, 38.115556, 200, 'km', { store: 'nearby2' });
+      const type = await storage.type('nearby2');
+      expect(type).toBe('zset');
+    });
+
+    it('GEORADIUS with STOREDIST 옵션', async () => {
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+        { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
+      ]);
+      await storage.georadius('cities', 13.361389, 38.115556, 200, 'km', { storeDist: 'nearby3' });
+      const type = await storage.type('nearby3');
+      expect(type).toBe('zset');
+    });
+  });
 });

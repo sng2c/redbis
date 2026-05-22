@@ -182,3 +182,25 @@ export function isInRadius(
 ): boolean {
   return calculateDistance(centerLon, centerLat, pointLon, pointLat, 'm') <= radiusMeters;
 }
+
+/** Convert a distance in the given unit to meters. */
+export function convertToMeters(distance: number, unit: 'm' | 'km' | 'ft' | 'mi'): number {
+  switch (unit) {
+    case 'km': return distance * 1000;
+    case 'ft': return distance * 0.3048;
+    case 'mi': return distance * 1609.34;
+    case 'm':
+    default: return distance;
+  }
+}
+
+/** Convert a distance in meters to the given unit. */
+export function convertFromMeters(distanceMeters: number, unit: 'm' | 'km' | 'ft' | 'mi'): number {
+  switch (unit) {
+    case 'km': return distanceMeters / 1000;
+    case 'ft': return distanceMeters / 0.3048;
+    case 'mi': return distanceMeters / 1609.34;
+    case 'm':
+    default: return distanceMeters;
+  }
+}
