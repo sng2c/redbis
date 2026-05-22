@@ -10,30 +10,30 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 
 | # | 명령 | 상태 | 비고 |
 |---|------|------|------|
-| 1 | AUTH | 🔲 | 인증 |
+| 1 | AUTH | ✅ | 인증 |
 | 2 | CLIENT CACHING | ❌ | 클라이언트 캐싱 제어 |
-| 3 | CLIENT GETNAME | 🔲 | 연결 이름 조회 |
+| 3 | CLIENT GETNAME | ✅ | 연결 이름 조회 |
 | 4 | CLIENT GETREDIR | ❌ | 추적 리디렉션 |
-| 5 | CLIENT ID | 🔲 | 연결 고유 ID |
-| 6 | CLIENT INFO | 🔲 | 연결 정보 |
-| 7 | CLIENT KILL | 🔲 | 연결 종료 |
-| 8 | CLIENT LIST | 🔲 | 연결 목록 |
+| 5 | CLIENT ID | ✅ | 연결 고유 ID |
+| 6 | CLIENT INFO | ✅ | 연결 정보 |
+| 7 | CLIENT KILL | ✅ | 연결 종료 |
+| 8 | CLIENT LIST | ✅ | 연결 목록 |
 | 9 | CLIENT NO-EVICT | ❌ | 클라이언트 제거 모드 |
 | 10 | CLIENT NO-TOUCH | ❌ | LRU/LFU 영향 제어 |
-| 11 | CLIENT PAUSE | 🔲 | 명령 처리 일시정지 |
-| 12 | CLIENT REPLY | 🔲 | 서버 응답 모드 |
-| 13 | CLIENT SETINFO | 🔲 | 클라이언트 정보 설정 |
-| 14 | CLIENT SETNAME | 🔲 | 연결 이름 설정 |
+| 11 | CLIENT PAUSE | ✅ | 명령 처리 일시정지 |
+| 12 | CLIENT REPLY | ✅ | 서버 응답 모드 |
+| 13 | CLIENT SETINFO | ✅ | 클라이언트 정보 설정 |
+| 14 | CLIENT SETNAME | ✅ | 연결 이름 설정 |
 | 15 | CLIENT TRACKING | ❌ | 서버 보조 클라이언트 캐시 |
 | 16 | CLIENT TRACKINGINFO | ❌ | 캐시 추적 정보 |
-| 17 | CLIENT UNBLOCK | 🔲 | 차단 클라이언트 해제 |
-| 18 | CLIENT UNPAUSE | 🔲 | 명령 처리 재개 |
+| 17 | CLIENT UNBLOCK | ✅ | 차단 클라이언트 해제 |
+| 18 | CLIENT UNPAUSE | ✅ | 명령 처리 재개 |
 | 19 | ECHO | ✅ | 메시지 에코 |
-| 20 | HELLO | 🔲 | RESP3 핸드셰이크 |
+| 20 | HELLO | ✅ | RESP3 핸드셰이크 |
 | 21 | PING | ✅ | echo 모드 지원 |
 | 22 | QUIT | ✅ | 연결 종료 |
-| 23 | RESET | 🔲 | 연결 리셋 |
-| 24 | SELECT | 🔲 | DB 선택 (DB 번호 개념 없음) |
+| 23 | RESET | ✅ | 연결 리셋 |
+| 24 | SELECT | ✅ | DB 선택 (단일 DB만 지원) |
 
 ## 2. String (문자열)
 
@@ -91,8 +91,8 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 | 69 | RENAMENX | ✅ | |
 | 70 | RESTORE | ❌ | Redis 내부 복원 |
 | 71 | SCAN | ✅ | |
-| 72 | SORT | 🔲 | 정렬 |
-| 73 | SORT_RO | 🔲 | 읽기 전용 정렬 |
+| 72 | SORT | ✅ | 정렬 |
+| 73 | SORT_RO | ✅ | 읽기 전용 정렬 |
 | 74 | TOUCH | ✅ | |
 | 75 | TTL | ✅ | |
 | 76 | TYPE | ✅ | string/hash/list/set/zset/hyperloglog/json/none |
@@ -248,42 +248,42 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 
 | # | 명령 | 상태 | 비고 |
 |---|------|------|------|
-| 194 | GEOADD | 🔲 | 경위도+멤버 추가 |
-| 195 | GEODIST | 🔲 | 두 멤버 간 거리 |
-| 196 | GEOHASH | 🔲 | 지오해시 반환 |
-| 197 | GEOPOS | 🔲 | 멤버 경위도 조회 |
-| 198 | GEORADIUS | 🔲 | 반경 검색 (deprecated) |
-| 199 | GEORADIUS_RO | 🔲 | 반경 검증 읽기 (deprecated) |
-| 200 | GEORADIUSBYMEMBER | 🔲 | 멤버 반경 검색 (deprecated) |
-| 201 | GEORADIUSBYMEMBER_RO | 🔲 | 멤버 반경 검증 읽기 (deprecated) |
-| 202 | GEOSEARCH | 🔲 | 박스/원 검색 (6.2+) |
-| 203 | GEOSEARCHSTORE | 🔲 | 검색 결과 저장 (6.2+) |
+| 194 | GEOADD | ✅ | 경위도+멤버 추가 |
+| 195 | GEODIST | ✅ | 두 멤버 간 거리 |
+| 196 | GEOHASH | ✅ | 지오해시 반환 |
+| 197 | GEOPOS | ✅ | 멤버 경위도 조회 |
+| 198 | GEORADIUS | ✅ | 반경 검색 (deprecated) |
+| 199 | GEORADIUS_RO | ✅ | 반경 검증 읽기 (deprecated) |
+| 200 | GEORADIUSBYMEMBER | ✅ | 멤버 반경 검색 (deprecated) |
+| 201 | GEORADIUSBYMEMBER_RO | ✅ | 멤버 반경 검증 읽기 (deprecated) |
+| 202 | GEOSEARCH | ✅ | 박스/원 검색 (6.2+) |
+| 203 | GEOSEARCHSTORE | ✅ | 검색 결과 저장 (6.2+) |
 
 ## 11. Stream (스트림)
 
 | # | 명령 | 상태 | 비고 |
 |---|------|------|------|
-| 204 | XACK | 🔲 | 메시지 확인 |
-| 205 | XADD | 🔲 | 메시지 추가 |
-| 206 | XAUTOCLAIM | 🔲 | 소유권 자동 획득 (6.2+) |
-| 207 | XCLAIM | 🔲 | 소유권 획득 |
-| 208 | XDEL | 🔲 | 메시지 삭제 |
-| 209 | XGROUP CREATE | 🔲 | 컨슈머 그룹 생성 |
-| 210 | XGROUP CREATECONSUMER | 🔲 | 컨슈머 생성 (6.2+) |
-| 211 | XGROUP DELCONSUMER | 🔲 | 컨슈머 삭제 |
-| 212 | XGROUP DESTROY | 🔲 | 그룹 삭제 |
-| 213 | XGROUP SETID | 🔲 | 그룹 ID 설정 |
-| 214 | XINFO CONSUMERS | 🔲 | 컨슈머 정보 |
-| 215 | XINFO GROUPS | 🔲 | 그룹 정보 |
-| 216 | XINFO STREAM | 🔲 | 스트림 정보 |
-| 217 | XLEN | 🔲 | 메시지 수 |
-| 218 | XPENDING | 🔲 | 대기 메시지 정보 |
-| 219 | XRANGE | 🔲 | ID 범위 조회 |
-| 220 | XREAD | 🔲 | 새 메시지 읽기 |
-| 221 | XREADGROUP | 🔲 | 그룹 메시지 읽기 |
-| 222 | XREVRANGE | 🔲 | 역순 ID 범위 |
+| 204 | XACK | ✅ | 메시지 확인 |
+| 205 | XADD | ✅ | 메시지 추가 |
+| 206 | XAUTOCLAIM | ✅ | 소유권 자동 획득 (6.2+) |
+| 207 | XCLAIM | ✅ | 소유권 획득 |
+| 208 | XDEL | ✅ | 메시지 삭제 |
+| 209 | XGROUP CREATE | ✅ | 컨슈머 그룹 생성 |
+| 210 | XGROUP CREATECONSUMER | ✅ | 컨슈머 생성 (6.2+) |
+| 211 | XGROUP DELCONSUMER | ✅ | 컨슈머 삭제 |
+| 212 | XGROUP DESTROY | ✅ | 그룹 삭제 |
+| 213 | XGROUP SETID | ✅ | 그룹 ID 설정 |
+| 214 | XINFO CONSUMERS | ✅ | 컨슈머 정보 |
+| 215 | XINFO GROUPS | ✅ | 그룹 정보 |
+| 216 | XINFO STREAM | ✅ | 스트림 정보 |
+| 217 | XLEN | ✅ | 메시지 수 |
+| 218 | XPENDING | ✅ | 대기 메시지 정보 |
+| 219 | XRANGE | ✅ | ID 범위 조회 |
+| 220 | XREAD | ✅ | 새 메시지 읽기 |
+| 221 | XREADGROUP | ✅ | 그룹 메시지 읽기 |
+| 222 | XREVRANGE | ✅ | 역순 ID 범위 |
 | 223 | XSETID | ❌ | 내부 복제용 |
-| 224 | XTRIM | 🔲 | 메시지 트림 |
+| 224 | XTRIM | ✅ | 메시지 트림 |
 
 ## 12. Pub/Sub (발행/구독)
 
@@ -325,7 +325,7 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 |---|------|------|------|
 | 262–281 | ACL 전체 | ❌ | ACL 미지원 |
 | 282 | BGREWRITEAOF | ❌ | AOF 재작성 |
-| 283 | BGSAVE | 🔲 | 비동기 저장 |
+| 283 | BGSAVE | ✅ | 비동기 저장 |
 | 284 | COMMAND | ✅ | |
 | 285 | COMMAND COUNT | ✅ | |
 | 286 | COMMAND DOCS | ✅ | |
@@ -334,8 +334,8 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 | 289 | COMMAND INFO | ✅ | |
 | 290 | COMMAND LIST | ✅ | |
 | 291 | CONFIG GET | ✅ | |
-| 292 | CONFIG RESETSTAT | 🔲 | 통계 초기화 |
-| 293 | CONFIG REWRITE | 🔲 | 설정 파일 저장 |
+| 292 | CONFIG RESETSTAT | ✅ | 통계 초기화 |
+| 293 | CONFIG REWRITE | ✅ | 설정 파일 저장 |
 | 294 | CONFIG SET | ✅ | |
 | 295 | DBSIZE | ✅ | |
 | 296 | FAILOVER | ❌ | 장애조치 |
@@ -418,9 +418,9 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 
 | # | 명령 | 상태 | 비고 |
 |---|------|------|------|
-| 437 | DELEX | 🔲 | 조건부 삭제 (8.4+) |
+| 437 | DELEX | ✅ | 조건부 삭제 (8.4+) |
 | 438 | DIGEST | ❌ | 해시 다이제스트 |
-| 439 | MSETEX | 🔲 | 다중 만료 설정 (8.4+) |
+| 439 | MSETEX | ✅ | 다중 만료 설정 (8.4+) |
 
 ---
 
