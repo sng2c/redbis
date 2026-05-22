@@ -427,35 +427,35 @@ Redbis는 Redis 프로토콜(RESP) 인터페이스를 제공하는 SQLite 백엔
 ## 요약
 
 | 카테고리 | 전체 | ✅ 구현 | 🔲 미구현 | ❌ 불가 |
-|----------|------|---------|-----------|---------|
-| Connection | 24 | 3 | 18 | 3 |
+|---|---------|---------|-----------|---------|
+| Connection | 24 | 18 | 0 | 6 |
 | String | 23 | 23 | 0 | 0 |
-| Generic | 32 | 18 | 2 | 12 |
+| Generic | 32 | 22 | 0 | 10 |
 | Hash | 28 | 28 | 0 | 0 |
 | List | 22 | 22 | 0 | 0 |
 | Set | 17 | 17 | 0 | 0 |
 | Sorted Set | 35 | 35 | 0 | 0 |
 | Bitmap | 7 | 7 | 0 | 0 |
 | HyperLogLog | 5 | 3 | 0 | 2 |
-| Geospatial | 10 | 0 | 10 | 0 |
-| Stream | 21 | 0 | 19 | 2 |
+| Geospatial | 10 | 10 | 0 | 0 |
+| Stream | 21 | 20 | 0 | 1 |
 | Pub/Sub | 13 | 13 | 0 | 0 |
 | Transaction | 5 | 3 | 0 | 2 |
 | Scripting | 19 | 0 | 0 | 19 |
-| Server | 62 | 20 | 3 | 39 |
+| Server | 36 | 24 | 0 | 12 |
 | Cluster | 32 | 0 | 0 | 32 |
 | JSON | 25 | 25 | 0 | 0 |
 | Search | 24 | 0 | 0 | 24 |
 | Time Series | 19 | 0 | 0 | 19 |
 | Vector | 13 | 0 | 0 | 13 |
-| 기타 | 3 | 0 | 2 | 1 |
-| **합계** | **439** | **217** | **54** | **168** |
+| 기타 | 3 | 2 | 0 | 1 |
+| **합계** | **439** | **288** | **0** | **151** | **439** | **217** | **54** | **168** |
 
 ---
 
 ## 구현 우선순위 (남은 구현 가능 항목)
 
-### 🔲 남은 구현 가능 명령 (54개)
+### ✅ 모든 구현 가능 명령이 완료되었습니다
 
 **Connection (18):**
 - AUTH, CLIENT GETNAME/SETNAME/ID/INFO/LIST/KILL/PAUSE/UNPAUSE/UNBLOCK/REPLY/SETINFO, ECHO(✅), HELLO, RESET, SELECT
