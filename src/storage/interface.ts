@@ -369,6 +369,21 @@ export interface IStorage {
   /** XSETID: Set the last-generated ID for a stream. */
   xsetid(key: string, id: string): Promise<string>;
 
+  // === SORT ===
+
+  /**
+   * SORT: Sort the elements in a LIST, SET, or ZSET key.
+   * Returns sorted elements (string[]) or, if STORE is specified, the count of stored elements (number).
+   */
+  sort(key: string, options?: {
+    byPattern?: string;
+    limit?: { offset: number; count: number };
+    getPatterns?: string[];
+    sortOrder?: 'ASC' | 'DESC';
+    alpha?: boolean;
+    store?: string;
+  }): Promise<string[] | number>;
+
   // === Server / Persistence ===
 
   /** Force a save/flush of data to persistent storage. No-op for InMemoryStorage. */
