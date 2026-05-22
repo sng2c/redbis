@@ -28,3 +28,7 @@ export function encodeArray(items: string[] | null): string {
   }
   return result;
 }
+
+export function encodeRawArray(items: string[]): string {
+  return `*${items.length}\r\n${items.join('')}`;
+}
