@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 import { encodeGeohash, decodeGeohash, geohashToString, calculateDistance, getBoundingBox, isInRadius, convertToMeters, convertFromMeters } from '../../utils/geo';
 import type { GeoSearchResult } from '../../utils/geo';
@@ -6,9 +7,7 @@ import type { GeoSearchResult } from '../../utils/geo';
 export const geoMethods = {
 _ensureGeoTypeOrThrow(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'zset') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'zset');
   },
 
 _unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {

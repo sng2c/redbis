@@ -1,12 +1,10 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const setMethods = {
 _ensureSetTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'set') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'set');
   },
 
 _cleanupSetIfEmpty(key: string): void {

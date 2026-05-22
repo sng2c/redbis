@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 
 export const bitmapMethods = {
@@ -28,7 +29,7 @@ _sqliteSetBitAt(bytes: number[], offset: number, value: 0 | 1): 0 | 1 {
 
 _ensureStringTypeOrThrow(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row && row.type !== 'string') throw new Error(WRONGTYPE_ERROR);
   },
 
 async setbit(key: string, offset: number, value: 0 | 1): Promise<number> {
@@ -51,7 +52,7 @@ async getbit(key: string, offset: number): Promise<number> {
     const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
     if (!row) return 0;
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow && typeRow.type !== 'string') throw new Error(WRONGTYPE_ERROR);
     const bytes = this._sqliteStringToBytes(row.value);
     return this._sqliteGetBitAt(bytes, offset);
   },
@@ -61,7 +62,7 @@ async bitcount(key: string, start?: number, end?: number): Promise<number> {
     const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
     if (!row) return 0;
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow && typeRow.type !== 'string') throw new Error(WRONGTYPE_ERROR);
     const bytes = this._sqliteStringToBytes(row.value);
     if (bytes.length === 0) return 0;
     let s = start ?? 0, e = end ?? -1;
@@ -79,7 +80,7 @@ async bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<num
     const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
     if (!row) return bit === 0 ? 0 : -1;
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow && typeRow.type !== 'string') throw new Error(WRONGTYPE_ERROR);
     const bytes = this._sqliteStringToBytes(row.value);
     if (bytes.length === 0) return bit === 0 ? 0 : -1;
     let s = start ?? 0, e = end ?? bytes.length - 1;
@@ -100,7 +101,7 @@ async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: stri
     for (const key of keys) this.evictExpired(key);
     for (const key of keys) {
       const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-      if (typeRow && typeRow.type !== 'string') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+      if (typeRow && typeRow.type !== 'string') throw new Error(WRONGTYPE_ERROR);
     }
     const srcArrays: number[][] = [];
     for (const key of keys) {

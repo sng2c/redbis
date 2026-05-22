@@ -1,12 +1,10 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const listMethods = {
 _ensureListTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'list') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'list');
   },
 
 _ensureListKeyExists(key: string): void {

@@ -1,20 +1,17 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import { globToRegex } from './types';
 import type { SqliteStorage } from './core';
 
 export const zsetMethods = {
 _ensureZsetTypeOrThrow(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'zset') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'zset');
   },
 
 _ensureZsetKvStoreEntry(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'zset') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'zset');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'zset', NULL)").run(key);
     }

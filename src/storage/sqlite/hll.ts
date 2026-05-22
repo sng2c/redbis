@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 
 const HLL_REGISTERS = 16384;
@@ -7,7 +8,7 @@ const HLL_BYTES = 12288;
 export const hllMethods = {
 _ensureHllTypeOrThrow(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hyperloglog') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row && row.type !== 'hyperloglog') throw new Error(WRONGTYPE_ERROR);
 
   },
 

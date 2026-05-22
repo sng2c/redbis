@@ -1,12 +1,11 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 
 export const listMethods = {
 _ensureListKvStoreEntry(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'list') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'list');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'list', NULL)").run(key);
     }
@@ -14,9 +13,7 @@ _ensureListKvStoreEntry(key: string): void {
 
 _ensureListTypeOrThrow(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'list') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'list');
   },
 
 _cleanupListIfEmpty(key: string): void {
@@ -69,7 +66,7 @@ async lpop(key: string, count?: number): Promise<string | string[] | null> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return null;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       if (count === undefined || count === 1) {
@@ -104,7 +101,7 @@ async rpop(key: string, count?: number): Promise<string | string[] | null> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return null;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       if (count === undefined || count === 1) {
@@ -139,7 +136,7 @@ async llen(key: string): Promise<number> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return 0;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
     const row = this.db.prepare('SELECT COUNT(*) as cnt FROM list_store WHERE key = ?').get(key) as { cnt: number };
     return row.cnt;
   },
@@ -148,7 +145,7 @@ async lrange(key: string, start: number, stop: number): Promise<string[]> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return [];
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
     const lenRow = this.db.prepare('SELECT COUNT(*) as cnt FROM list_store WHERE key = ?').get(key) as { cnt: number };
     const len = lenRow.cnt;
     if (len === 0) return [];
@@ -167,7 +164,7 @@ async lindex(key: string, index: number): Promise<string | null> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return null;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
     const lenRow = this.db.prepare('SELECT COUNT(*) as cnt FROM list_store WHERE key = ?').get(key) as { cnt: number };
     const len = lenRow.cnt;
     let idx = index;
@@ -198,7 +195,7 @@ async lrem(key: string, count: number, element: string): Promise<number> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return 0;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       let removed = 0;
@@ -228,7 +225,7 @@ async ltrim(key: string, start: number, stop: number): Promise<void> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       const lenRow = this.db.prepare('SELECT COUNT(*) as cnt FROM list_store WHERE key = ?').get(key) as { cnt: number };
@@ -265,7 +262,7 @@ async lpos(key: string, element: string, options?: { rank?: number; maxlen?: num
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return null;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const rank = options?.rank ?? 1;
     const maxlen = options?.maxlen;
@@ -314,7 +311,7 @@ async lpushx(key: string, element: string): Promise<number> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return 0;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       const minSeqRow = this.db.prepare('SELECT MIN(seq) as minSeq FROM list_store WHERE key = ?').get(key) as { minSeq: number | null };
@@ -330,7 +327,7 @@ async rpushx(key: string, element: string): Promise<number> {
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return 0;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       const maxSeqRow = this.db.prepare('SELECT MAX(seq) as maxSeq FROM list_store WHERE key = ?').get(key) as { maxSeq: number | null };
@@ -346,7 +343,7 @@ async linsert(key: string, position: 'BEFORE' | 'AFTER', pivot: string, element:
     this.evictExpired(key);
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!typeRow) return 0;
-    if (typeRow.type !== 'list') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow.type !== 'list') throw new Error(WRONGTYPE_ERROR);
 
     const tx = this.db.transaction(() => {
       // Find pivot
@@ -411,9 +408,7 @@ async blpop(keys: string[], timeout: number): Promise<{ key: string; element: st
     for (const key of keys) {
       this.evictExpired(key);
       const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-      if (typeRow && typeRow.type !== 'list') {
-        throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-      }
+      assertType(typeRow?.type, 'list');
       if (!typeRow) continue;
       const tx = this.db.transaction(() => {
         const row = this.db.prepare('SELECT seq, value FROM list_store WHERE key = ? ORDER BY seq ASC LIMIT 1').get(key) as { seq: number; value: string } | undefined;
@@ -432,9 +427,7 @@ async brpop(keys: string[], timeout: number): Promise<{ key: string; element: st
     for (const key of keys) {
       this.evictExpired(key);
       const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-      if (typeRow && typeRow.type !== 'list') {
-        throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-      }
+      assertType(typeRow?.type, 'list');
       if (!typeRow) continue;
       const tx = this.db.transaction(() => {
         const row = this.db.prepare('SELECT seq, value FROM list_store WHERE key = ? ORDER BY seq DESC LIMIT 1').get(key) as { seq: number; value: string } | undefined;
@@ -462,9 +455,7 @@ async lmpop(numkeys: number, keys: string[], dir: 'LEFT' | 'RIGHT', count?: numb
     for (const key of keys) {
       this.evictExpired(key);
       const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-      if (typeRow && typeRow.type !== 'list') {
-        throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-      }
+      assertType(typeRow?.type, 'list');
       if (!typeRow) continue;
       const tx = this.db.transaction(() => {
         const orderClause = dir === 'LEFT' ? 'ASC' : 'DESC';

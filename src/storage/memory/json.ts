@@ -1,12 +1,10 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const jsonMethods = {
 _ensureJsonTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'json');
   },
 
 _parseJsonPath(path: string): Array<{ type: 'field'; name: string } | { type: 'index'; index: number }> {
@@ -134,9 +132,7 @@ async jsonGet(key: string, paths?: string[]): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
 
@@ -167,9 +163,7 @@ async jsonDel(key: string, path?: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return 0;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     if (!path || path === '$') {
       this.store.delete(key);
@@ -204,9 +198,7 @@ async jsonType(key: string, path?: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     if (!path || path === '$') {
@@ -222,9 +214,7 @@ async jsonStrlen(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     const effectivePath = path || '$';
@@ -278,9 +268,7 @@ async jsonObjkeys(key: string, path?: string): Promise<string[] | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     const effectivePath = path || '$';
@@ -298,9 +286,7 @@ async jsonObjlen(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     const effectivePath = path || '$';
@@ -372,9 +358,7 @@ async jsonArrlen(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     const effectivePath = path || '$';
@@ -635,9 +619,7 @@ async jsonDebugMemory(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     const effectivePath = path || '$';
@@ -655,9 +637,7 @@ async jsonResp(key: string, path?: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.type !== 'json') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'json');
 
     const root = JSON.parse(entry.value);
     const effectivePath = path || '$';

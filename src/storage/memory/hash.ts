@@ -1,12 +1,10 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const hashMethods = {
 _ensureHashTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'hash');
   },
 
 _evictExpiredHashFields(key: string): void {

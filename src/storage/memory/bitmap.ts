@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const bitmapMethods = {
@@ -35,10 +36,7 @@ _setBitAt(bytes: number[], offset: number, value: 0 | 1): 0 | 1 {
   },
 
 _ensureStringTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'string') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'string');
   },
 
 async setbit(key: string, offset: number, value: 0 | 1): Promise<number> {
@@ -67,9 +65,7 @@ async getbit(key: string, offset: number): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return 0;
-    if (entry.type !== 'string') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'string');
     const bytes = this._stringToBytes(entry.value);
     return this._getBitAt(bytes, offset);
   },
@@ -78,9 +74,7 @@ async bitcount(key: string, start?: number, end?: number): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return 0;
-    if (entry.type !== 'string') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'string');
     const bytes = this._stringToBytes(entry.value);
     if (bytes.length === 0) return 0;
     let s = start ?? 0;
@@ -104,9 +98,7 @@ async bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<num
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return bit === 0 ? 0 : -1;
-    if (entry.type !== 'string') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(entry.type, 'string');
     const bytes = this._stringToBytes(entry.value);
     if (bytes.length === 0) return bit === 0 ? 0 : -1;
     let s = start ?? 0;
@@ -129,9 +121,7 @@ async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: stri
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) {
       const entry = this.store.get(key);
-      if (entry && entry.type !== 'string') {
-        throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-      }
+      assertType(entry?.type, 'string');
     }
 
     const srcArrays: number[][] = [];

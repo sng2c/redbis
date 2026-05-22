@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import { globToRegex } from './types';
 import type { SqliteStorage } from './core';
 
@@ -20,9 +21,7 @@ _cleanupHashIfEmpty(key: string): void {
 
 _ensureHashKvStoreEntry(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'hash');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'hash', NULL)").run(key);
     }
@@ -32,9 +31,7 @@ async hset(key: string, pairs: Array<{ field: string; value: string }>): Promise
     this.evictExpired(key);
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'hash');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'hash', NULL)").run(key);
     }
@@ -55,9 +52,7 @@ async hget(key: string, field: string): Promise<string | null> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const fieldRow = this.db.prepare('SELECT value FROM hash_store WHERE key = ? AND field = ?').get(key, field) as { value: string } | undefined;
     return fieldRow?.value ?? null;
   },
@@ -67,9 +62,7 @@ async hdel(key: string, fields: string[]): Promise<number> {
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return 0;
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     let deleted = 0;
     for (const field of fields) {
       const result = this.db.prepare('DELETE FROM hash_store WHERE key = ? AND field = ?').run(key, field);
@@ -85,9 +78,7 @@ async hgetall(key: string): Promise<Array<{ field: string; value: string }>> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return [];
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const rows = this.db.prepare('SELECT field, value FROM hash_store WHERE key = ? ORDER BY field').all(key) as { field: string; value: string }[];
     return rows.map(r => ({ field: r.field, value: r.value }));
   },
@@ -98,9 +89,7 @@ async hkeys(key: string): Promise<string[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return [];
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const rows = this.db.prepare('SELECT field FROM hash_store WHERE key = ? ORDER BY field').all(key) as { field: string }[];
     return rows.map(r => r.field);
   },
@@ -111,9 +100,7 @@ async hvals(key: string): Promise<string[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return [];
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const rows = this.db.prepare('SELECT value FROM hash_store WHERE key = ?').all(key) as { value: string }[];
     return rows.map(r => r.value);
   },
@@ -124,9 +111,7 @@ async hlen(key: string): Promise<number> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return 0;
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const cntRow = this.db.prepare('SELECT COUNT(*) as cnt FROM hash_store WHERE key = ?').get(key) as { cnt: number };
     return cntRow.cnt;
   },
@@ -137,9 +122,7 @@ async hexists(key: string, field: string): Promise<boolean> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return false;
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const fieldRow = this.db.prepare('SELECT 1 FROM hash_store WHERE key = ? AND field = ?').get(key, field);
     return !!fieldRow;
   },
@@ -148,9 +131,7 @@ async hsetnx(key: string, field: string, value: string): Promise<boolean> {
     this.evictExpired(key);
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'hash');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'hash', NULL)").run(key);
     }
@@ -168,9 +149,7 @@ async hmget(key: string, fields: string[]): Promise<(string | null)[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => null);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     return fields.map(f => {
       const fieldRow = this.db.prepare('SELECT value FROM hash_store WHERE key = ? AND field = ?').get(key, f) as { value: string } | undefined;
       return fieldRow?.value ?? null;
@@ -181,9 +160,7 @@ async hincrby(key: string, field: string, delta: number): Promise<number> {
     this.evictExpired(key);
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'hash');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'hash', NULL)").run(key);
     }
@@ -209,9 +186,7 @@ async hincrbyfloat(key: string, field: string, delta: number): Promise<string> {
     this.evictExpired(key);
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'hash');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'hash', NULL)").run(key);
     }
@@ -243,9 +218,7 @@ async hrandfield(key: string, count: number): Promise<string[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return [];
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     if (count === 0) return [];
     if (count > 0) {
       const rows = this.db.prepare('SELECT field FROM hash_store WHERE key = ? ORDER BY RANDOM() LIMIT ?').all(key, count) as { field: string }[];
@@ -267,9 +240,7 @@ async hscan(cursor: number, key: string, pattern?: string, count?: number): Prom
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return { cursor: 0, items: [] };
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const effectiveCount = count ?? 10;
     const allRows = this.db.prepare('SELECT field, value FROM hash_store WHERE key = ? ORDER BY field').all(key) as { field: string; value: string }[];
     const regex = pattern ? globToRegex(pattern) : null;
@@ -291,9 +262,7 @@ async hstrlen(key: string, field: string): Promise<number> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return 0;
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const fieldRow = this.db.prepare('SELECT value FROM hash_store WHERE key = ? AND field = ?').get(key, field) as { value: string } | undefined;
     return fieldRow ? fieldRow.value.length : 0;
   },
@@ -303,9 +272,7 @@ async hgetdel(key: string, fields: string[]): Promise<(string | null)[]> {
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => null);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const tx = this.db.transaction(() => {
       const result: (string | null)[] = [];
       for (const field of fields) {
@@ -324,9 +291,7 @@ async hgetex(key: string, fields: string[], options?: { ex?: number; px?: number
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => null);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const result: (string | null)[] = [];
     for (const field of fields) {
       const fieldRow = this.db.prepare('SELECT value FROM hash_store WHERE key = ? AND field = ?').get(key, field) as { value: string } | undefined;
@@ -352,9 +317,7 @@ async hsetex(key: string, pairs: Array<{ field: string; value: string }>, option
     this.evictExpired(key);
     this._evictExpiredHashFields(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row?.type, 'hash');
     if (!row) {
       this.db.prepare("INSERT OR REPLACE INTO kv_store (key, value, type, expires_at) VALUES (?, '', 'hash', NULL)").run(key);
     }
@@ -392,9 +355,7 @@ async hexpire(key: string, fields: string[], seconds: number): Promise<number[]>
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => 2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     const expiresAt = Date.now() + seconds * 1000;
     for (const field of fields) {
@@ -415,9 +376,7 @@ async hexpireat(key: string, fields: string[], timestamp: number): Promise<numbe
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => 2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     const expiresAt = timestamp * 1000;
     for (const field of fields) {
@@ -438,9 +397,7 @@ async hpexpire(key: string, fields: string[], milliseconds: number): Promise<num
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => 2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     const expiresAt = Date.now() + milliseconds;
     for (const field of fields) {
@@ -461,9 +418,7 @@ async hpexpireat(key: string, fields: string[], msTimestamp: number): Promise<nu
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => 2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     for (const field of fields) {
       const fieldRow = this.db.prepare('SELECT 1 FROM hash_store WHERE key = ? AND field = ?').get(key, field);
@@ -483,9 +438,7 @@ async hexpiretime(key: string, fields: string[]): Promise<number[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => -2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     for (const field of fields) {
       const fieldRow = this.db.prepare('SELECT expires_at FROM hash_store WHERE key = ? AND field = ?').get(key, field) as { expires_at: number | null } | undefined;
@@ -506,9 +459,7 @@ async hpexpiretime(key: string, fields: string[]): Promise<number[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => -2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     for (const field of fields) {
       const fieldRow = this.db.prepare('SELECT expires_at FROM hash_store WHERE key = ? AND field = ?').get(key, field) as { expires_at: number | null } | undefined;
@@ -529,9 +480,7 @@ async hpersist(key: string, fields: string[]): Promise<number[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => -2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     for (const field of fields) {
       const fieldRow = this.db.prepare('SELECT expires_at FROM hash_store WHERE key = ? AND field = ?').get(key, field) as { expires_at: number | null } | undefined;
@@ -553,9 +502,7 @@ async httl(key: string, fields: string[]): Promise<number[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => -2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     const now = Date.now();
     for (const field of fields) {
@@ -584,9 +531,7 @@ async hpttl(key: string, fields: string[]): Promise<number[]> {
     this._cleanupHashIfEmpty(key);
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
     if (!row) return fields.map(() => -2);
-    if (row.type !== 'hash') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(row.type, 'hash');
     const results: number[] = [];
     const now = Date.now();
     for (const field of fields) {

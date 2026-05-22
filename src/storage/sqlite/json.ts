@@ -1,10 +1,11 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 
 export const jsonMethods = {
 _ensureJsonTypeOrThrow(key: string): void {
     const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (row && row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row && row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
   },
 
 _sqliteParseJsonPath(path: string): Array<{ type: 'field'; name: string } | { type: 'index'; index: number }> {
@@ -104,7 +105,7 @@ async jsonGet(key: string, paths?: string[]): Promise<string | null> {
     const row = this.db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key) as { value: string } | undefined;
     if (!row) return null;
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (typeRow && typeRow.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (typeRow && typeRow.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     if (!paths || paths.length === 0) return row.value;
     if (paths.length === 1) {
@@ -124,7 +125,7 @@ async jsonDel(key: string, path?: string): Promise<number> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return 0;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     if (!path || path === '$') { this.db.prepare('DELETE FROM kv_store WHERE key = ?').run(key); return 1; }
     const fullRow = this.db.prepare('SELECT value, expires_at FROM kv_store WHERE key = ?').get(key) as { value: string; expires_at: number | null } | undefined;
     if (!fullRow) return 0;
@@ -148,7 +149,7 @@ async jsonType(key: string, path?: string): Promise<string | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     if (!path || path === '$') return this._sqliteJsonTypeOf(root);
     const resolved = this._sqliteJsonResolvePath(root, path);
@@ -160,7 +161,7 @@ async jsonStrlen(key: string, path?: string): Promise<number | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     const effectivePath = path || '$';
     const resolved = this._sqliteJsonResolvePath(root, effectivePath);
@@ -196,7 +197,7 @@ async jsonObjkeys(key: string, path?: string): Promise<string[] | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     const effectivePath = path || '$';
     const resolved = this._sqliteJsonResolvePath(root, effectivePath);
@@ -210,7 +211,7 @@ async jsonObjlen(key: string, path?: string): Promise<number | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     const effectivePath = path || '$';
     const resolved = this._sqliteJsonResolvePath(root, effectivePath);
@@ -261,7 +262,7 @@ async jsonArrlen(key: string, path?: string): Promise<number | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     const effectivePath = path || '$';
     const resolved = this._sqliteJsonResolvePath(root, effectivePath);
@@ -440,7 +441,7 @@ async jsonDebugMemory(key: string, path?: string): Promise<number | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     const effectivePath = path || '$';
     if (effectivePath === '$' || effectivePath === '') return row.value.length;
@@ -453,7 +454,7 @@ async jsonResp(key: string, path?: string): Promise<string | null> {
     this.evictExpired(key);
     const row = this.db.prepare('SELECT value, type FROM kv_store WHERE key = ?').get(key) as { value: string; type: string } | undefined;
     if (!row) return null;
-    if (row.type !== 'json') throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    if (row.type !== 'json') throw new Error(WRONGTYPE_ERROR);
     const root = JSON.parse(row.value);
     const effectivePath = path || '$';
     let val: any;

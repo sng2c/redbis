@@ -1,5 +1,6 @@
+import { encodeInteger, encodeBulkString } from '../protocol/resp.js';
+
 // PubSubManager — Centralized pub/sub state shared across all connections.
-// No imports from any other Redbis source file. Self-contained.
 
 /**
  * Glob matching implementing Redis KEYS semantics:
@@ -69,21 +70,6 @@ function globMatch(pattern: string, str: string): boolean {
   return pi === pLen && si === sLen;
 }
 
-/** Encode a RESP integer: :<number>\r\n */
-function encodeInt(n: number): string {
-  return ':' + n + '\r\n';
-}
-
-/** Encode a RESP bulk string: $<len>\r\n<data>\r\n */
-function encodeBulkString(s: string): string {
-  return '$' + s.length + '\r\n' + s + '\r\n';
-}
-
-/** Encode a RESP null bulk string: $-1\r\n */
-function encodeNullBulkString(): string {
-  return '$-1\r\n';
-}
-
 export class PubSubManager {
   // connId → set of channel names
   private channelSubs: Map<string, Set<string>> = new Map();
@@ -122,7 +108,7 @@ export class PubSubManager {
         '*3\r\n' +
         '$9\r\nsubscribe\r\n' +
         encodeBulkString(channel) +
-        encodeInt(total)
+        encodeInteger(total)
       );
     }
     return results;
@@ -138,8 +124,8 @@ export class PubSubManager {
         results.push(
           '*3\r\n' +
           '$11\r\nunsubscribe\r\n' +
-          encodeNullBulkString() +
-          encodeInt(0)
+          encodeBulkString(null) +
+          encodeInteger(0)
         );
         return results;
       }
@@ -165,7 +151,7 @@ export class PubSubManager {
         '*3\r\n' +
         '$11\r\nunsubscribe\r\n' +
         encodeBulkString(channel) +
-        encodeInt(total)
+        encodeInteger(total)
       );
     }
 
@@ -179,8 +165,8 @@ export class PubSubManager {
       results.push(
         '*3\r\n' +
         '$11\r\nunsubscribe\r\n' +
-        encodeNullBulkString() +
-        encodeInt(0)
+        encodeBulkString(null) +
+        encodeInteger(0)
       );
     }
 
@@ -204,7 +190,7 @@ export class PubSubManager {
         '*3\r\n' +
         '$10\r\npsubscribe\r\n' +
         encodeBulkString(pattern) +
-        encodeInt(total)
+        encodeInteger(total)
       );
     }
     return results;
@@ -219,8 +205,8 @@ export class PubSubManager {
         results.push(
           '*3\r\n' +
           '$12\r\npunsubscribe\r\n' +
-          encodeNullBulkString() +
-          encodeInt(0)
+          encodeBulkString(null) +
+          encodeInteger(0)
         );
         return results;
       }
@@ -246,7 +232,7 @@ export class PubSubManager {
         '*3\r\n' +
         '$12\r\npunsubscribe\r\n' +
         encodeBulkString(pattern) +
-        encodeInt(total)
+        encodeInteger(total)
       );
     }
 
@@ -258,8 +244,8 @@ export class PubSubManager {
       results.push(
         '*3\r\n' +
         '$12\r\npunsubscribe\r\n' +
-        encodeNullBulkString() +
-        encodeInt(0)
+        encodeBulkString(null) +
+        encodeInteger(0)
       );
     }
 

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 const HLL_REGISTERS = 16384;
@@ -6,10 +7,7 @@ const HLL_BYTES = 12288;
 
 export const hllMethods = {
 _ensureHllTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'hyperloglog') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'hyperloglog');
   },
 
 _murmurHash64(str: string): bigint {

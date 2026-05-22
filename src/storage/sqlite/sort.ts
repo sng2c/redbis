@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 
 export const sortMethods = {
@@ -14,9 +15,7 @@ async sort(key: string, options?: {
 
     // Check key type
     const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
-    if (typeRow && typeRow.type !== 'list' && typeRow.type !== 'set' && typeRow.type !== 'zset') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertTypeOneOf(typeRow?.type, ['list', 'set', 'zset']);
 
     // Collect elements
     let elements: string[];

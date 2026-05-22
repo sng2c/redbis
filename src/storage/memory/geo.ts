@@ -1,14 +1,12 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 import { encodeGeohash, decodeGeohash, geohashToString, calculateDistance, getBoundingBox, isInRadius } from '../../utils/geo';
 import type { GeoSearchResult } from '../../utils/geo';
 
 export const geoMethods = {
 _ensureGeoTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'zset') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'zset');
   },
 
 _unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {

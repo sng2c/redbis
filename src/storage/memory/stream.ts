@@ -1,14 +1,12 @@
 // @ts-nocheck
+import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 import type { StreamEntry, StreamConsumer, StreamInfo, GroupInfo, PendingEntry } from '../interface';
 import type { StreamData, InternalStreamGroup, InternalStreamConsumer } from './types';
 
 export const streamMethods = {
 _ensureStreamTypeOrThrow(key: string): void {
-    const entry = this.store.get(key);
-    if (entry && entry.type !== 'stream') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertType(this.store.get(key)?.type, 'stream');
   },
 
 _ensureStreamKeyExists(key: string): void {

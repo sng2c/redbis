@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { assertTypeOneOf } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const sortMethods = {
@@ -14,9 +15,7 @@ async sort(key: string, options?: {
 
     // Check key type
     const entry = this.store.get(key);
-    if (entry && entry.type !== 'list' && entry.type !== 'set' && entry.type !== 'zset') {
-      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
-    }
+    assertTypeOneOf(entry?.type, ['list', 'set', 'zset']);
 
     // Collect elements
     let elements: string[];
