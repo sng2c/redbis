@@ -354,6 +354,35 @@ export class CommandHandler {
         case 'JSON.RESP': return await this.handleJsonResp(args.slice(1));
         case 'JSON.MERGE': return await this.handleJsonMerge(args.slice(1));
 
+        // GEO operations
+        case 'GEOADD': return await this.handleGeoadd(args.slice(1));
+        case 'GEOHASH': return await this.handleGeohash(args.slice(1));
+        case 'GEOPOS': return await this.handleGeopos(args.slice(1));
+        case 'GEODIST': return await this.handleGeodist(args.slice(1));
+        case 'GEORADIUS': return await this.handleGeoradius(args.slice(1));
+        case 'GEORADIUSBYMEMBER': return await this.handleGeoradiusbymember(args.slice(1));
+        case 'GEOSEARCH': return await this.handleGeosearch(args.slice(1));
+        case 'GEOSEARCHSTORE': return await this.handleGeosearchstore(args.slice(1));
+        case 'GEORADIUS_RO': return await this.handleGeoradiusRo(args.slice(1));
+        case 'GEORADIUSBYMEMBER_RO': return await this.handleGeoradiusbymemberRo(args.slice(1));
+
+        // Stream operations
+        case 'XADD': return await this.handleXadd(args.slice(1));
+        case 'XTRIM': return await this.handleXtrim(args.slice(1));
+        case 'XDEL': return await this.handleXdel(args.slice(1));
+        case 'XRANGE': return await this.handleXrange(args.slice(1));
+        case 'XREVRANGE': return await this.handleXrevrange(args.slice(1));
+        case 'XLEN': return await this.handleXlen(args.slice(1));
+        case 'XREAD': return await this.handleXread(args.slice(1));
+        case 'XGROUP': return await this.handleXgroup(args.slice(1));
+        case 'XREADGROUP': return await this.handleXreadgroup(args.slice(1));
+        case 'XACK': return await this.handleXack(args.slice(1));
+        case 'XPENDING': return await this.handleXpending(args.slice(1));
+        case 'XCLAIM': return await this.handleXclaim(args.slice(1));
+        case 'XAUTOCLAIM': return await this.handleXautoclaim(args.slice(1));
+        case 'XINFO': return await this.handleXinfo(args.slice(1));
+        case 'XSETID': return await this.handleXsetid(args.slice(1));
+
         default:
           return encodeError(`unknown command '${args[0]}'`);
       }
@@ -595,6 +624,14 @@ export class CommandHandler {
       'JSON.ARRPOP', 'JSON.ARRTRIM', 'JSON.NUMINCRBY', 'JSON.NUMMULTBY',
       'JSON.MGET', 'JSON.MSET', 'JSON.TOGGLE', 'JSON.CLEAR',
       'JSON.DEBUG', 'JSON.RESP', 'JSON.MERGE',
+      // GEO
+      'GEOADD', 'GEOHASH', 'GEOPOS', 'GEODIST',
+      'GEORADIUS', 'GEORADIUSBYMEMBER', 'GEOSEARCH', 'GEOSEARCHSTORE',
+      'GEORADIUS_RO', 'GEORADIUSBYMEMBER_RO',
+      // Stream
+      'XADD', 'XTRIM', 'XDEL', 'XRANGE', 'XREVRANGE', 'XLEN',
+      'XREAD', 'XGROUP', 'XREADGROUP', 'XACK', 'XPENDING',
+      'XCLAIM', 'XAUTOCLAIM', 'XINFO', 'XSETID',
     ];
   }
 
@@ -1020,6 +1057,35 @@ export class CommandHandler {
         case 'JSON.DEBUG': return await this.handleJsonDebug(args.slice(1));
         case 'JSON.RESP': return await this.handleJsonResp(args.slice(1));
         case 'JSON.MERGE': return await this.handleJsonMerge(args.slice(1));
+
+        // GEO operations
+        case 'GEOADD': return await this.handleGeoadd(args.slice(1));
+        case 'GEOHASH': return await this.handleGeohash(args.slice(1));
+        case 'GEOPOS': return await this.handleGeopos(args.slice(1));
+        case 'GEODIST': return await this.handleGeodist(args.slice(1));
+        case 'GEORADIUS': return await this.handleGeoradius(args.slice(1));
+        case 'GEORADIUSBYMEMBER': return await this.handleGeoradiusbymember(args.slice(1));
+        case 'GEOSEARCH': return await this.handleGeosearch(args.slice(1));
+        case 'GEOSEARCHSTORE': return await this.handleGeosearchstore(args.slice(1));
+        case 'GEORADIUS_RO': return await this.handleGeoradiusRo(args.slice(1));
+        case 'GEORADIUSBYMEMBER_RO': return await this.handleGeoradiusbymemberRo(args.slice(1));
+
+        // Stream operations
+        case 'XADD': return await this.handleXadd(args.slice(1));
+        case 'XTRIM': return await this.handleXtrim(args.slice(1));
+        case 'XDEL': return await this.handleXdel(args.slice(1));
+        case 'XRANGE': return await this.handleXrange(args.slice(1));
+        case 'XREVRANGE': return await this.handleXrevrange(args.slice(1));
+        case 'XLEN': return await this.handleXlen(args.slice(1));
+        case 'XREAD': return await this.handleXread(args.slice(1));
+        case 'XGROUP': return await this.handleXgroup(args.slice(1));
+        case 'XREADGROUP': return await this.handleXreadgroup(args.slice(1));
+        case 'XACK': return await this.handleXack(args.slice(1));
+        case 'XPENDING': return await this.handleXpending(args.slice(1));
+        case 'XCLAIM': return await this.handleXclaim(args.slice(1));
+        case 'XAUTOCLAIM': return await this.handleXautoclaim(args.slice(1));
+        case 'XINFO': return await this.handleXinfo(args.slice(1));
+        case 'XSETID': return await this.handleXsetid(args.slice(1));
 
         default: return encodeError(`unknown command '${args[0]}'`);
       }
@@ -3853,6 +3919,7 @@ export class CommandHandler {
     const path = args[1];
     const value = args[2];
     const result = await this.storage.jsonStrappend(key, path, value);
+    if (result === null) return encodeBulkString(null);
     return encodeInteger(result);
   }
 
@@ -4023,5 +4090,1118 @@ export class CommandHandler {
     const value = args[2];
     await this.storage.jsonMerge(key, path, value);
     return encodeSimpleString('OK');
+  }
+
+  // === GEO operations ===
+
+  private async handleGeoadd(args: string[]): Promise<string> {
+    if (args.length < 4) {
+      return encodeError("wrong number of arguments for 'GEOADD' command");
+    }
+    const key = args[0];
+    let nx = false, xx = false, ch = false;
+    let i = 1;
+    // Parse optional flags
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'NX') { nx = true; i++; }
+      else if (opt === 'XX') { xx = true; i++; }
+      else if (opt === 'CH') { ch = true; i++; }
+      else break;
+    }
+    // Remaining args: longitude latitude member triplets
+    const remaining = args.length - i;
+    if (remaining < 3 || remaining % 3 !== 0) {
+      return encodeError("wrong number of arguments for 'GEOADD' command");
+    }
+    const members: Array<{ longitude: number; latitude: number; member: string }> = [];
+    for (let j = i; j < args.length; j += 3) {
+      const longitude = parseFloat(args[j]);
+      const latitude = parseFloat(args[j + 1]);
+      if (isNaN(longitude) || isNaN(latitude)) {
+        return encodeError('ERR value is not a valid float');
+      }
+      if (longitude < -180 || longitude > 180) {
+        return encodeError('ERR invalid longitude, valid range is [-180, 180]');
+      }
+      if (latitude < -85.05112878 || latitude > 85.05112878) {
+        return encodeError('ERR invalid latitude, valid range is [-85.05112878, 85.05112878]');
+      }
+      members.push({ longitude, latitude, member: args[j + 2] });
+    }
+    const options: { nx?: boolean; xx?: boolean; ch?: boolean } = {};
+    if (nx) options.nx = true;
+    if (xx) options.xx = true;
+    if (ch) options.ch = true;
+    const result = await this.storage.geoadd(key, members, options);
+    return encodeInteger(result);
+  }
+
+  private async handleGeohash(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'GEOHASH' command");
+    }
+    const key = args[0];
+    const members = args.slice(1);
+    const result = await this.storage.geohash(key, members);
+    const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleGeopos(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'GEOPOS' command");
+    }
+    const key = args[0];
+    const members = args.slice(1);
+    const result = await this.storage.geopos(key, members);
+    const parts = result.map(r => {
+      if (r === null) return encodeBulkString(null);
+      // Each element is [longitude, latitude]
+      return `*2\r\n${encodeBulkString(String(r[0]))}${encodeBulkString(String(r[1]))}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleGeodist(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'GEODIST' command");
+    }
+    const key = args[0];
+    const member1 = args[1];
+    const member2 = args[2];
+    let unit: 'm' | 'km' | 'ft' | 'mi' = 'm';
+    if (args.length >= 4) {
+      const u = args[3].toLowerCase();
+      if (u === 'km' || u === 'ft' || u === 'mi' || u === 'm') {
+        unit = u as 'm' | 'km' | 'ft' | 'mi';
+      } else {
+        return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+      }
+    }
+    const result = await this.storage.geodist(key, member1, member2, unit);
+    if (result === null) return encodeBulkString(null);
+    return encodeBulkString(String(result));
+  }
+
+  private async handleGeoradius(args: string[]): Promise<string> {
+    if (args.length < 5) {
+      return encodeError("wrong number of arguments for 'GEORADIUS' command");
+    }
+    const key = args[0];
+    const longitude = parseFloat(args[1]);
+    const latitude = parseFloat(args[2]);
+    const radius = parseFloat(args[3]);
+    if (isNaN(longitude) || isNaN(latitude) || isNaN(radius)) {
+      return encodeError('ERR value is not a valid float');
+    }
+    const unitArg = args[4].toLowerCase();
+    let unit: 'm' | 'km' | 'ft' | 'mi' = 'm';
+    if (unitArg === 'km' || unitArg === 'ft' || unitArg === 'mi' || unitArg === 'm') {
+      unit = unitArg as 'm' | 'km' | 'ft' | 'mi';
+    } else {
+      return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+    }
+    let withCoord = false, withDist = false, withHash = false;
+    let count: number | undefined;
+    let sort: 'ASC' | 'DESC' | undefined;
+    let store: string | undefined;
+    let storeDist: string | undefined;
+    for (let i = 5; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WITHCOORD') { withCoord = true; }
+      else if (opt === 'WITHDIST') { withDist = true; }
+      else if (opt === 'WITHASH') { withHash = true; }
+      else if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+      else if (opt === 'ASC') { sort = 'ASC'; }
+      else if (opt === 'DESC') { sort = 'DESC'; }
+      else if (opt === 'STORE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        store = args[i];
+      }
+      else if (opt === 'STOREDIST') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        storeDist = args[i];
+      }
+    }
+    const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string } = {};
+    if (withCoord) options.withCoord = true;
+    if (withDist) options.withDist = true;
+    if (withHash) options.withHash = true;
+    if (count !== undefined) options.count = count;
+    if (sort) options.sort = sort;
+    if (store) options.store = store;
+    if (storeDist) options.storeDist = storeDist;
+    const result = await this.storage.georadius(key, longitude, latitude, radius, unit, options);
+    // If STORE or STOREDIST was used, return integer (count)
+    if (store || storeDist) {
+      return encodeInteger(result.length);
+    }
+    if (!withCoord && !withDist && !withHash) {
+      // Just member names
+      return encodeArray(result.map(r => r.member));
+    }
+    // Array of arrays
+    const parts = result.map(r => {
+      const items: string[] = [encodeBulkString(r.member)];
+      if (withDist) items.push(encodeBulkString(String(r.distance)));
+      if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
+      if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
+        items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      }
+      return `*${items.length}\r\n${items.join('')}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleGeoradiusbymember(args: string[]): Promise<string> {
+    if (args.length < 4) {
+      return encodeError("wrong number of arguments for 'GEORADIUSBYMEMBER' command");
+    }
+    const key = args[0];
+    const member = args[1];
+    const radius = parseFloat(args[2]);
+    if (isNaN(radius)) {
+      return encodeError('ERR value is not a valid float');
+    }
+    const unitArg = args[3].toLowerCase();
+    let unit: 'm' | 'km' | 'ft' | 'mi' = 'm';
+    if (unitArg === 'km' || unitArg === 'ft' || unitArg === 'mi' || unitArg === 'm') {
+      unit = unitArg as 'm' | 'km' | 'ft' | 'mi';
+    } else {
+      return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+    }
+    let withCoord = false, withDist = false, withHash = false;
+    let count: number | undefined;
+    let sort: 'ASC' | 'DESC' | undefined;
+    let store: string | undefined;
+    let storeDist: string | undefined;
+    for (let i = 4; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WITHCOORD') { withCoord = true; }
+      else if (opt === 'WITHDIST') { withDist = true; }
+      else if (opt === 'WITHASH') { withHash = true; }
+      else if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+      else if (opt === 'ASC') { sort = 'ASC'; }
+      else if (opt === 'DESC') { sort = 'DESC'; }
+      else if (opt === 'STORE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        store = args[i];
+      }
+      else if (opt === 'STOREDIST') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        storeDist = args[i];
+      }
+    }
+    const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string } = {};
+    if (withCoord) options.withCoord = true;
+    if (withDist) options.withDist = true;
+    if (withHash) options.withHash = true;
+    if (count !== undefined) options.count = count;
+    if (sort) options.sort = sort;
+    if (store) options.store = store;
+    if (storeDist) options.storeDist = storeDist;
+    const result = await this.storage.georadiusbymember(key, member, radius, unit, options);
+    if (store || storeDist) {
+      return encodeInteger(result.length);
+    }
+    if (!withCoord && !withDist && !withHash) {
+      return encodeArray(result.map(r => r.member));
+    }
+    const parts = result.map(r => {
+      const items: string[] = [encodeBulkString(r.member)];
+      if (withDist) items.push(encodeBulkString(String(r.distance)));
+      if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
+      if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
+        items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      }
+      return `*${items.length}\r\n${items.join('')}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleGeosearch(args: string[]): Promise<string> {
+    if (args.length < 4) {
+      return encodeError("wrong number of arguments for 'GEOSEARCH' command");
+    }
+    const key = args[0];
+    let fromMember: string | undefined;
+    let fromLongitude: number | undefined;
+    let fromLatitude: number | undefined;
+    let byRadius: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' } | undefined;
+    let byBox: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' } | undefined;
+    let sort: 'ASC' | 'DESC' | undefined;
+    let count: number | undefined;
+    let any: boolean | undefined;
+    let withCoord = false, withDist = false, withHash = false;
+
+    let i = 1;
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'FROMMEMBER') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        fromMember = args[i]; i++;
+      } else if (opt === 'FROMLONGITUDE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        fromLongitude = parseFloat(args[i]);
+        if (isNaN(fromLongitude)) return encodeError('ERR value is not a valid float');
+        i++;
+      } else if (opt === 'FROMLATITUDE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        fromLatitude = parseFloat(args[i]);
+        if (isNaN(fromLatitude)) return encodeError('ERR value is not a valid float');
+        i++;
+      } else if (opt === 'BYRADIUS') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const radius = parseFloat(args[i]);
+        if (isNaN(radius)) return encodeError('ERR value is not a valid float');
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const unitArg = args[i].toLowerCase();
+        if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+        byRadius = { radius, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
+        i++;
+      } else if (opt === 'BYBOX') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const width = parseFloat(args[i]);
+        if (isNaN(width)) return encodeError('ERR value is not a valid float');
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const height = parseFloat(args[i]);
+        if (isNaN(height)) return encodeError('ERR value is not a valid float');
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const unitArg = args[i].toLowerCase();
+        if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+        byBox = { width, height, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
+        i++;
+      } else if (opt === 'ASC') { sort = 'ASC'; i++; }
+      else if (opt === 'DESC') { sort = 'DESC'; i++; }
+      else if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        // Check for ANY flag
+        if (i < args.length && args[i].toUpperCase() === 'ANY') { any = true; i++; }
+      } else if (opt === 'WITHCOORD') { withCoord = true; i++; }
+      else if (opt === 'WITHDIST') { withDist = true; i++; }
+      else if (opt === 'WITHASH') { withHash = true; i++; }
+      else { return encodeError('ERR syntax error'); }
+    }
+
+    const options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean } = {};
+    if (fromMember !== undefined) options.fromMember = fromMember;
+    if (fromLongitude !== undefined) options.fromLongitude = fromLongitude;
+    if (fromLatitude !== undefined) options.fromLatitude = fromLatitude;
+    if (byRadius) options.byRadius = byRadius;
+    if (byBox) options.byBox = byBox;
+    if (sort) options.sort = sort;
+    if (count !== undefined) options.count = count;
+    if (any) options.any = true;
+    if (withCoord) options.withCoord = true;
+    if (withDist) options.withDist = true;
+    if (withHash) options.withHash = true;
+
+    const result = await this.storage.geosearch(key, options);
+    if (!withCoord && !withDist && !withHash) {
+      return encodeArray(result.map(r => r.member));
+    }
+    const parts = result.map(r => {
+      const items: string[] = [encodeBulkString(r.member)];
+      if (withDist) items.push(encodeBulkString(String(r.distance)));
+      if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
+      if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
+        items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      }
+      return `*${items.length}\r\n${items.join('')}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleGeosearchstore(args: string[]): Promise<string> {
+    if (args.length < 5) {
+      return encodeError("wrong number of arguments for 'GEOSEARCHSTORE' command");
+    }
+    const destination = args[0];
+    const source = args[1];
+    let fromMember: string | undefined;
+    let fromLongitude: number | undefined;
+    let fromLatitude: number | undefined;
+    let byRadius: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' } | undefined;
+    let byBox: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' } | undefined;
+    let sort: 'ASC' | 'DESC' | undefined;
+    let count: number | undefined;
+    let any: boolean | undefined;
+    let storeDist = false;
+
+    let i = 2;
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'FROMMEMBER') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        fromMember = args[i]; i++;
+      } else if (opt === 'FROMLONGITUDE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        fromLongitude = parseFloat(args[i]);
+        if (isNaN(fromLongitude)) return encodeError('ERR value is not a valid float');
+        i++;
+      } else if (opt === 'FROMLATITUDE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        fromLatitude = parseFloat(args[i]);
+        if (isNaN(fromLatitude)) return encodeError('ERR value is not a valid float');
+        i++;
+      } else if (opt === 'BYRADIUS') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const radius = parseFloat(args[i]);
+        if (isNaN(radius)) return encodeError('ERR value is not a valid float');
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const unitArg = args[i].toLowerCase();
+        if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+        byRadius = { radius, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
+        i++;
+      } else if (opt === 'BYBOX') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const width = parseFloat(args[i]);
+        if (isNaN(width)) return encodeError('ERR value is not a valid float');
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const height = parseFloat(args[i]);
+        if (isNaN(height)) return encodeError('ERR value is not a valid float');
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        const unitArg = args[i].toLowerCase();
+        if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+        byBox = { width, height, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
+        i++;
+      } else if (opt === 'ASC') { sort = 'ASC'; i++; }
+      else if (opt === 'DESC') { sort = 'DESC'; i++; }
+      else if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        if (i < args.length && args[i].toUpperCase() === 'ANY') { any = true; i++; }
+      } else if (opt === 'STOREDIST') { storeDist = true; i++; }
+      else { return encodeError('ERR syntax error'); }
+    }
+
+    const options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean } = {};
+    if (fromMember !== undefined) options.fromMember = fromMember;
+    if (fromLongitude !== undefined) options.fromLongitude = fromLongitude;
+    if (fromLatitude !== undefined) options.fromLatitude = fromLatitude;
+    if (byRadius) options.byRadius = byRadius;
+    if (byBox) options.byBox = byBox;
+    if (sort) options.sort = sort;
+    if (count !== undefined) options.count = count;
+    if (any) options.any = true;
+    if (storeDist) options.storeDist = true;
+
+    const result = await this.storage.geosearchstore(destination, source, options);
+    return encodeInteger(result);
+  }
+
+  private async handleGeoradiusRo(args: string[]): Promise<string> {
+    // Same as GEORADIUS but STORE/STOREDIST are not allowed
+    if (args.length < 5) {
+      return encodeError("wrong number of arguments for 'GEORADIUS_RO' command");
+    }
+    const key = args[0];
+    const longitude = parseFloat(args[1]);
+    const latitude = parseFloat(args[2]);
+    const radius = parseFloat(args[3]);
+    if (isNaN(longitude) || isNaN(latitude) || isNaN(radius)) {
+      return encodeError('ERR value is not a valid float');
+    }
+    const unitArg = args[4].toLowerCase();
+    let unit: 'm' | 'km' | 'ft' | 'mi' = 'm';
+    if (unitArg === 'km' || unitArg === 'ft' || unitArg === 'mi' || unitArg === 'm') {
+      unit = unitArg as 'm' | 'km' | 'ft' | 'mi';
+    } else {
+      return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+    }
+    let withCoord = false, withDist = false, withHash = false;
+    let count: number | undefined;
+    let sort: 'ASC' | 'DESC' | undefined;
+    for (let i = 5; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WITHCOORD') { withCoord = true; }
+      else if (opt === 'WITHDIST') { withDist = true; }
+      else if (opt === 'WITHASH') { withHash = true; }
+      else if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+      else if (opt === 'ASC') { sort = 'ASC'; }
+      else if (opt === 'DESC') { sort = 'DESC'; }
+      else if (opt === 'STORE' || opt === 'STOREDIST') {
+        return encodeError(`${opt} option is not allowed on GEORADIUS_RO`);
+      }
+    }
+    const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC' } = {};
+    if (withCoord) options.withCoord = true;
+    if (withDist) options.withDist = true;
+    if (withHash) options.withHash = true;
+    if (count !== undefined) options.count = count;
+    if (sort) options.sort = sort;
+    const result = await this.storage.georadius(key, longitude, latitude, radius, unit, options);
+    if (!withCoord && !withDist && !withHash) {
+      return encodeArray(result.map(r => r.member));
+    }
+    const parts = result.map(r => {
+      const items: string[] = [encodeBulkString(r.member)];
+      if (withDist) items.push(encodeBulkString(String(r.distance)));
+      if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
+      if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
+        items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      }
+      return `*${items.length}\r\n${items.join('')}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleGeoradiusbymemberRo(args: string[]): Promise<string> {
+    // Same as GEORADIUSBYMEMBER but STORE/STOREDIST are not allowed
+    if (args.length < 4) {
+      return encodeError("wrong number of arguments for 'GEORADIUSBYMEMBER_RO' command");
+    }
+    const key = args[0];
+    const member = args[1];
+    const radius = parseFloat(args[2]);
+    if (isNaN(radius)) {
+      return encodeError('ERR value is not a valid float');
+    }
+    const unitArg = args[3].toLowerCase();
+    let unit: 'm' | 'km' | 'ft' | 'mi' = 'm';
+    if (unitArg === 'km' || unitArg === 'ft' || unitArg === 'mi' || unitArg === 'm') {
+      unit = unitArg as 'm' | 'km' | 'ft' | 'mi';
+    } else {
+      return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+    }
+    let withCoord = false, withDist = false, withHash = false;
+    let count: number | undefined;
+    let sort: 'ASC' | 'DESC' | undefined;
+    for (let i = 4; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'WITHCOORD') { withCoord = true; }
+      else if (opt === 'WITHDIST') { withDist = true; }
+      else if (opt === 'WITHASH') { withHash = true; }
+      else if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+      else if (opt === 'ASC') { sort = 'ASC'; }
+      else if (opt === 'DESC') { sort = 'DESC'; }
+      else if (opt === 'STORE' || opt === 'STOREDIST') {
+        return encodeError(`${opt} option is not allowed on GEORADIUSBYMEMBER_RO`);
+      }
+    }
+    const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC' } = {};
+    if (withCoord) options.withCoord = true;
+    if (withDist) options.withDist = true;
+    if (withHash) options.withHash = true;
+    if (count !== undefined) options.count = count;
+    if (sort) options.sort = sort;
+    const result = await this.storage.georadiusbymember(key, member, radius, unit, options);
+    if (!withCoord && !withDist && !withHash) {
+      return encodeArray(result.map(r => r.member));
+    }
+    const parts = result.map(r => {
+      const items: string[] = [encodeBulkString(r.member)];
+      if (withDist) items.push(encodeBulkString(String(r.distance)));
+      if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
+      if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
+        items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      }
+      return `*${items.length}\r\n${items.join('')}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  // === Stream operations ===
+
+  private encodeStreamEntry(entry: { id: string; fields: Record<string, string> }): string {
+    const flat: string[] = [entry.id];
+    for (const [k, v] of Object.entries(entry.fields)) {
+      flat.push(k, v);
+    }
+    return encodeArray(flat);
+  }
+
+  private async handleXadd(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'XADD' command");
+    }
+    const key = args[0];
+    let nomkstream = false;
+    let maxlen: number | undefined;
+    let approx = false;
+    let minid: string | undefined;
+    let limit: number | undefined;
+    let i = 1;
+
+    // Parse optional flags
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'NOMKSTREAM') {
+        nomkstream = true; i++;
+      } else if (opt === 'MAXLEN') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        approx = false;
+        if (args[i] === '~') { approx = true; i++; if (i >= args.length) return encodeError('ERR syntax error'); }
+        maxlen = parseInt(args[i]);
+        if (isNaN(maxlen) || maxlen < 0) return encodeError('ERR value is not an integer or out of range');
+        i++;
+        // Check for LIMIT after MAXLEN
+        if (i < args.length && args[i].toUpperCase() === 'LIMIT') {
+          i++; if (i >= args.length) return encodeError('ERR syntax error');
+          limit = parseInt(args[i]);
+          if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
+          i++;
+        }
+      } else if (opt === 'MINID') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        approx = false;
+        if (args[i] === '~') { approx = true; i++; if (i >= args.length) return encodeError('ERR syntax error'); }
+        minid = args[i];
+        i++;
+        if (i < args.length && args[i].toUpperCase() === 'LIMIT') {
+          i++; if (i >= args.length) return encodeError('ERR syntax error');
+          limit = parseInt(args[i]);
+          if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
+          i++;
+        }
+      } else {
+        break;
+      }
+    }
+
+    // Next arg is the ID
+    if (i >= args.length) return encodeError("wrong number of arguments for 'XADD' command");
+    let id = args[i];
+    i++;
+
+    // Remaining args must be field-value pairs
+    const remaining = args.length - i;
+    if (remaining < 2 || remaining % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'XADD' command");
+    }
+    const fields: Record<string, string> = {};
+    for (let j = i; j < args.length; j += 2) {
+      fields[args[j]] = args[j + 1];
+    }
+
+    const options: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean; limit?: number } = {};
+    if (maxlen !== undefined) { options.maxlen = maxlen; options.approx = approx; }
+    if (minid !== undefined) { options.minid = minid; options.approx = approx; }
+    if (nomkstream) options.nomkstream = true;
+    if (limit !== undefined) options.limit = limit;
+
+    const result = await this.storage.xadd(key, id, fields, options);
+    if (result === null) return encodeBulkString(null);
+    return encodeBulkString(result);
+  }
+
+  private async handleXtrim(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'XTRIM' command");
+    }
+    const key = args[0];
+    const strategyArg = args[1].toUpperCase();
+    let strategy: 'MAXLEN' | 'MINID';
+    if (strategyArg === 'MAXLEN') {
+      strategy = 'MAXLEN';
+    } else if (strategyArg === 'MINID') {
+      strategy = 'MINID';
+    } else {
+      return encodeError('ERR syntax error');
+    }
+    let approx = false;
+    let threshold: string | number;
+    let limit: number | undefined;
+    let i = 2;
+    if (args[i] === '~') { approx = true; i++; }
+    threshold = strategy === 'MAXLEN' ? parseInt(args[i]) : args[i];
+    if (strategy === 'MAXLEN' && isNaN(threshold as number)) {
+      return encodeError('ERR value is not an integer or out of range');
+    }
+    i++;
+    if (i < args.length && args[i].toUpperCase() === 'LIMIT') {
+      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      limit = parseInt(args[i]);
+      if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
+    }
+    const result = await this.storage.xtrim(key, strategy, threshold, approx, limit);
+    return encodeInteger(result);
+  }
+
+  private async handleXdel(args: string[]): Promise<string> {
+    if (args.length < 2) {
+      return encodeError("wrong number of arguments for 'XDEL' command");
+    }
+    const key = args[0];
+    const ids = args.slice(1);
+    const result = await this.storage.xdel(key, ids);
+    return encodeInteger(result);
+  }
+
+  private async handleXrange(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'XRANGE' command");
+    }
+    const key = args[0];
+    const start = args[1];
+    const end = args[2];
+    let count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i].toUpperCase() === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const result = await this.storage.xrange(key, start, end, count);
+    const parts = result.map(e => this.encodeStreamEntry(e));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXrevrange(args: string[]): Promise<string> {
+    if (args.length < 3) {
+      return encodeError("wrong number of arguments for 'XREVRANGE' command");
+    }
+    const key = args[0];
+    const end = args[1]; // Note: XREVRANGE args are end then start
+    const start = args[2];
+    let count: number | undefined;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i].toUpperCase() === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      }
+    }
+    const result = await this.storage.xrevrange(key, end, start, count);
+    const parts = result.map(e => this.encodeStreamEntry(e));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXlen(args: string[]): Promise<string> {
+    if (args.length !== 1) {
+      return encodeError("wrong number of arguments for 'XLEN' command");
+    }
+    const result = await this.storage.xlen(args[0]);
+    return encodeInteger(result);
+  }
+
+  private async handleXread(args: string[]): Promise<string> {
+    let count: number | undefined;
+    let block: number | undefined;
+    let i = 0;
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'BLOCK') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        block = parseInt(args[i]);
+        if (isNaN(block)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'STREAMS') {
+        i++;
+        break;
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+    if (i >= args.length) return encodeError("wrong number of arguments for 'XREAD' command");
+    // After STREAMS: keys then IDs, each count is the same
+    const remaining = args.length - i;
+    if (remaining < 2 || remaining % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'XREAD' command");
+    }
+    const numStreams = remaining / 2;
+    const keys = args.slice(i, i + numStreams);
+    const ids = args.slice(i + numStreams);
+
+    // If BLOCK > 0, return null immediately (non-blocking implementation)
+    if (block !== undefined && block > 0) {
+      // For blocking reads, we just return null (no data available immediately)
+      // A real implementation would wait, but here we return null
+    }
+
+    const result = await this.storage.xread(keys, ids, count);
+    if (result === null) return encodeArray(null);
+    // Format: array of [key, [entries...]]
+    const parts = result.map(stream => {
+      const keyEnc = encodeBulkString(stream.key);
+      const entriesEnc = `*${stream.entries.length}\r\n${stream.entries.map(e => this.encodeStreamEntry(e)).join('')}`;
+      return `*2\r\n${keyEnc}${entriesEnc}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXgroup(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'XGROUP' command");
+    const sub = args[0].toUpperCase();
+    switch (sub) {
+      case 'CREATE': return await this.handleXgroupCreate(args.slice(1));
+      case 'DESTROY': return await this.handleXgroupDestroy(args.slice(1));
+      case 'CREATECONSUMER': return await this.handleXgroupCreateconsumer(args.slice(1));
+      case 'DELCONSUMER': return await this.handleXgroupDelconsumer(args.slice(1));
+      case 'SETID': return await this.handleXgroupSetid(args.slice(1));
+      default: return encodeError(`unknown subcommand '${args[0]}'`);
+    }
+  }
+
+  private async handleXgroupCreate(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'XGROUP CREATE' command");
+    const key = args[0];
+    const group = args[1];
+    let id = args[2];
+    let mkstream = false;
+    for (let i = 3; i < args.length; i++) {
+      if (args[i].toUpperCase() === 'MKSTREAM') { mkstream = true; }
+    }
+    const result = await this.storage.xgroupCreate(key, group, id, mkstream);
+    return encodeSimpleString(result);
+  }
+
+  private async handleXgroupDestroy(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'XGROUP DESTROY' command");
+    const key = args[0];
+    const group = args[1];
+    const result = await this.storage.xgroupDestroy(key, group);
+    return encodeInteger(result);
+  }
+
+  private async handleXgroupCreateconsumer(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'XGROUP CREATECONSUMER' command");
+    const key = args[0];
+    const group = args[1];
+    const consumer = args[2];
+    const result = await this.storage.xgroupCreateconsumer(key, group, consumer);
+    return encodeInteger(result);
+  }
+
+  private async handleXgroupDelconsumer(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'XGROUP DELCONSUMER' command");
+    const key = args[0];
+    const group = args[1];
+    const consumer = args[2];
+    const result = await this.storage.xgroupDelconsumer(key, group, consumer);
+    return encodeInteger(result);
+  }
+
+  private async handleXgroupSetid(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'XGROUP SETID' command");
+    const key = args[0];
+    const group = args[1];
+    const id = args[2];
+    const result = await this.storage.xgroupSetid(key, group, id);
+    return encodeSimpleString(result);
+  }
+
+  private async handleXreadgroup(args: string[]): Promise<string> {
+    if (args.length < 4) return encodeError("wrong number of arguments for 'XREADGROUP' command");
+    // GROUP group consumer [COUNT count] [BLOCK ms] STREAMS key [key ...] ID [ID ...]
+    if (args[0].toUpperCase() !== 'GROUP') return encodeError('ERR syntax error');
+    const group = args[1];
+    const consumer = args[2];
+    let count: number | undefined;
+    let block: number | undefined;
+    let noack = false;
+    let i = 3;
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'BLOCK') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        block = parseInt(args[i]);
+        if (isNaN(block)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'NOACK') {
+        noack = true; i++;
+      } else if (opt === 'STREAMS') {
+        i++; break;
+      } else {
+        return encodeError('ERR syntax error');
+      }
+    }
+    if (i >= args.length) return encodeError("wrong number of arguments for 'XREADGROUP' command");
+    const remaining = args.length - i;
+    if (remaining < 2 || remaining % 2 !== 0) {
+      return encodeError("wrong number of arguments for 'XREADGROUP' command");
+    }
+    const numStreams = remaining / 2;
+    const keys = args.slice(i, i + numStreams);
+    const ids = args.slice(i + numStreams);
+
+    const result = await this.storage.xreadgroup(group, consumer, keys, ids, count, noack);
+    if (result === null) return encodeArray(null);
+    const parts = result.map(stream => {
+      const keyEnc = encodeBulkString(stream.key);
+      const entriesEnc = `*${stream.entries.length}\r\n${stream.entries.map(e => this.encodeStreamEntry(e)).join('')}`;
+      return `*2\r\n${keyEnc}${entriesEnc}`;
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXack(args: string[]): Promise<string> {
+    if (args.length < 3) return encodeError("wrong number of arguments for 'XACK' command");
+    const key = args[0];
+    const group = args[1];
+    const ids = args.slice(2);
+    const result = await this.storage.xack(key, group, ids);
+    return encodeInteger(result);
+  }
+
+  private async handleXpending(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'XPENDING' command");
+    const key = args[0];
+    const group = args[1];
+
+    // Two forms:
+    // XPENDING key group [[IDLE min-idle] start end count [consumer]]
+    if (args.length === 2) {
+      // Summary form
+      const result = await this.storage.xpending(key, group);
+      if (Array.isArray(result)) {
+        // Detailed form result (shouldn't happen here but handle)
+        const entries = result as import('../storage/interface').PendingEntry[];
+        const parts = entries.map(e => {
+          return `*4\r\n${encodeBulkString(e.id)}${encodeBulkString(e.consumer)}${encodeInteger(Math.floor(e.deliveredTime))}${encodeInteger(e.deliveryCount)}`;
+        });
+        return `*${parts.length}\r\n${parts.join('')}`;
+      }
+      // Summary: { count, minId, maxId, consumers }
+      const summary = result as { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> };
+      const consumerParts = summary.consumers.map(c => {
+        return `*2\r\n${encodeBulkString(c.name)}${encodeInteger(c.pending)}`;
+      });
+      return `*${4 + consumerParts.length}\r\n${encodeInteger(summary.count)}${encodeBulkString(summary.minId)}${encodeBulkString(summary.maxId)}${encodeInteger(consumerParts.length)}${consumerParts.join('')}`;
+    }
+
+    // Detailed form
+    let i = 2;
+    let idle: number | undefined;
+    if (args[i].toUpperCase() === 'IDLE') {
+      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      idle = parseInt(args[i]);
+      if (isNaN(idle)) return encodeError('ERR value is not an integer or out of range');
+      i++;
+    }
+    if (i + 2 >= args.length) return encodeError("wrong number of arguments for 'XPENDING' command");
+    const start = args[i];
+    const end = args[i + 1];
+    const count = parseInt(args[i + 2]);
+    if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+    let consumer: string | undefined;
+    if (i + 3 < args.length) {
+      consumer = args[i + 3];
+    }
+    const options: { start?: string; end?: string; count?: number; consumer?: string; idle?: number } = {};
+    options.start = start;
+    options.end = end;
+    options.count = count;
+    if (consumer) options.consumer = consumer;
+    if (idle !== undefined) options.idle = idle;
+    const result = await this.storage.xpending(key, group, options);
+    // Detailed form returns PendingEntry[]
+    if (Array.isArray(result)) {
+      const entries = result as import('../storage/interface').PendingEntry[];
+      const parts = entries.map(e => {
+        return `*4\r\n${encodeBulkString(e.id)}${encodeBulkString(e.consumer)}${encodeInteger(Math.floor(e.deliveredTime))}${encodeInteger(e.deliveryCount)}`;
+      });
+      return `*${parts.length}\r\n${parts.join('')}`;
+    }
+    // Summary (shouldn't reach here usually)
+    const summary = result as { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> };
+    const consumerParts = summary.consumers.map(c => {
+      return `*2\r\n${encodeBulkString(c.name)}${encodeInteger(c.pending)}`;
+    });
+    return `*4\r\n${encodeInteger(summary.count)}${encodeBulkString(summary.minId)}${encodeBulkString(summary.maxId)}${encodeInteger(consumerParts.length)}${consumerParts.join('')}`;
+  }
+
+  private async handleXclaim(args: string[]): Promise<string> {
+    if (args.length < 5) return encodeError("wrong number of arguments for 'XCLAIM' command");
+    const key = args[0];
+    const group = args[1];
+    const consumer = args[2];
+    const minIdleTime = parseInt(args[3]);
+    if (isNaN(minIdleTime)) return encodeError('ERR value is not an integer or out of range');
+    // Parse IDs until we hit a flag
+    const ids: string[] = [];
+    let i = 4;
+    while (i < args.length && !args[i].toUpperCase().startsWith('IDLE') && !args[i].toUpperCase().startsWith('TIME') && !args[i].toUpperCase().startsWith('RETRYCOUNT') && args[i].toUpperCase() !== 'FORCE' && args[i].toUpperCase() !== 'JUSTID') {
+      ids.push(args[i]);
+      i++;
+    }
+    if (ids.length === 0) return encodeError("wrong number of arguments for 'XCLAIM' command");
+    let idle: number | undefined;
+    let time: number | undefined;
+    let retrycount: number | undefined;
+    let force = false;
+    let justid = false;
+    while (i < args.length) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'IDLE') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        idle = parseInt(args[i]);
+        if (isNaN(idle)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'TIME') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        time = parseInt(args[i]);
+        if (isNaN(time)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'RETRYCOUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        retrycount = parseInt(args[i]);
+        if (isNaN(retrycount)) return encodeError('ERR value is not an integer or out of range');
+        i++;
+      } else if (opt === 'FORCE') {
+        force = true; i++;
+      } else if (opt === 'JUSTID') {
+        justid = true; i++;
+      } else {
+        // Treat as ID
+        ids.push(args[i]); i++;
+      }
+    }
+    const options: { idle?: number; time?: number; retrycount?: number; force?: boolean; justid?: boolean } = {};
+    if (idle !== undefined) options.idle = idle;
+    if (time !== undefined) options.time = time;
+    if (retrycount !== undefined) options.retrycount = retrycount;
+    if (force) options.force = true;
+    if (justid) options.justid = true;
+
+    const result = await this.storage.xclaim(key, group, consumer, minIdleTime, ids, options);
+    if (justid) {
+      // Result is string[] (just IDs)
+      const idList = result as string[];
+      return encodeArray(idList);
+    }
+    // Result is StreamEntry[]
+    const entries = result as import('../storage/interface').StreamEntry[];
+    const parts = entries.map(e => this.encodeStreamEntry(e));
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXautoclaim(args: string[]): Promise<string> {
+    if (args.length < 5) return encodeError("wrong number of arguments for 'XAUTOCLAIM' command");
+    const key = args[0];
+    const group = args[1];
+    const consumer = args[2];
+    const minIdleTime = parseInt(args[3]);
+    if (isNaN(minIdleTime)) return encodeError('ERR value is not an integer or out of range');
+    const start = args[4];
+    let count: number | undefined;
+    let justid = false;
+    for (let i = 5; i < args.length; i++) {
+      const opt = args[i].toUpperCase();
+      if (opt === 'COUNT') {
+        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        count = parseInt(args[i]);
+        if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+      } else if (opt === 'JUSTID') {
+        justid = true;
+      }
+    }
+    const options: { count?: number; justid?: boolean } = {};
+    if (count !== undefined) options.count = count;
+    if (justid) options.justid = true;
+
+    const result = await this.storage.xautoclaim(key, group, consumer, minIdleTime, start, options);
+    if (justid) {
+      // Result.entries is string[]
+      const entries = result.entries as string[];
+      return `*2\r\n${encodeBulkString(result.nextStartId)}${encodeArray(entries)}`;
+    }
+    // Result.entries is StreamEntry[]
+    const entries = result.entries as import('../storage/interface').StreamEntry[];
+    const parts = entries.map(e => this.encodeStreamEntry(e));
+    return `*2\r\n${encodeBulkString(result.nextStartId)}*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXinfo(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'XINFO' command");
+    const sub = args[0].toUpperCase();
+    switch (sub) {
+      case 'STREAM': return await this.handleXinfoStream(args.slice(1));
+      case 'GROUPS': return await this.handleXinfoGroups(args.slice(1));
+      case 'CONSUMERS': return await this.handleXinfoConsumers(args.slice(1));
+      default: return encodeError(`unknown subcommand '${args[0]}'`);
+    }
+  }
+
+  private async handleXinfoStream(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'XINFO STREAM' command");
+    const key = args[0];
+    const result = await this.storage.xinfoStream(key);
+    // Return as flat array of field-value pairs
+    const items: string[] = [
+      'length', String(result.length),
+      'first-entry', result.firstEntry ? this.encodeStreamEntry(result.firstEntry) : encodeBulkString(null),
+      'last-entry', result.lastEntry ? this.encodeStreamEntry(result.lastEntry) : encodeBulkString(null),
+      'max-deleted-entry-id', String(result.maxDeletedEntryId),
+      'entries-added', String(result.entriesAdded),
+      'recorded-first-entry-id', String(result.recordedFirstEntryId),
+      'groups', String(result.groups),
+    ];
+    return encodeArray(items);
+  }
+
+  private async handleXinfoGroups(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'XINFO GROUPS' command");
+    const key = args[0];
+    const result = await this.storage.xinfoGroups(key);
+    const parts = result.map(g => {
+      const items = [
+        'name', g.name,
+        'consumers', String(g.consumers),
+        'pending', String(g.pending),
+        'last-delivered-id', g.lastDeliveredId,
+        'entries-read', String(g.entriesRead),
+        'lag', String(g.lag),
+      ];
+      return encodeArray(items);
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXinfoConsumers(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'XINFO CONSUMERS' command");
+    const key = args[0];
+    const group = args[1];
+    const result = await this.storage.xinfoConsumers(key, group);
+    const parts = result.map(c => {
+      const items = [
+        'name', c.name,
+        'pending', String(c.pendingCount),
+        'idle', String(c.idleTime),
+      ];
+      return encodeArray(items);
+    });
+    return `*${parts.length}\r\n${parts.join('')}`;
+  }
+
+  private async handleXsetid(args: string[]): Promise<string> {
+    if (args.length < 2) return encodeError("wrong number of arguments for 'XSETID' command");
+    const key = args[0];
+    const id = args[1];
+    const result = await this.storage.xsetid(key, id);
+    return encodeSimpleString(result);
   }
 }

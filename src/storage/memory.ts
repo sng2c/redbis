@@ -1,6 +1,34 @@
 import { IStorage } from './interface';
+import type { StreamEntry, StreamConsumer, StreamInfo, GroupInfo, PendingEntry } from './interface';
+import { encodeGeohash, decodeGeohash, geohashToString, calculateDistance, getBoundingBox, isInRadius } from '../utils/geo';
+import type { GeoSearchResult } from '../utils/geo';
 
 type StoreEntry = { value: string; type: string; expiresAt: number | null };
+
+interface InternalStreamConsumer {
+  name: string;
+  seenTime: number;
+  pendingCount: number;
+  lastDeliveredId: string;
+  lastAckTime: number;
+}
+
+interface InternalStreamGroup {
+  name: string;
+  lastDeliveredId: string;
+  entriesRead: number;
+  consumers: Map<string, InternalStreamConsumer>;
+  pending: PendingEntry[];
+}
+
+interface StreamData {
+  entries: StreamEntry[];
+  groups: Map<string, InternalStreamGroup>;
+  lastId: string;
+  maxDeletedId: string;
+  entriesAdded: number;
+  recordedFirstId: string;
+}
 
 function formatMemoryHuman(bytes: number): string {
   if (bytes < 1024) return bytes + 'B';
@@ -22,6 +50,8 @@ export class InMemoryStorage implements IStorage {
   private listStore: Map<string, string[]> = new Map();
   private setStore: Map<string, Set<string>> = new Map();
   private zsetStore: Map<string, Map<string, number>> = new Map();
+  private geoStore: Map<string, Map<string, { longitude: number; latitude: number }>> = new Map();
+  private streamStore: Map<string, StreamData> = new Map();
   private startTime = Date.now();
 
   // === Eviction helpers ===
@@ -38,6 +68,8 @@ export class InMemoryStorage implements IStorage {
       this.listStore.delete(key);
       this.setStore.delete(key);
       this.zsetStore.delete(key);
+      this.geoStore.delete(key);
+      this.streamStore.delete(key);
     }
   }
 
@@ -54,6 +86,8 @@ export class InMemoryStorage implements IStorage {
       this.listStore.delete(key);
       this.setStore.delete(key);
       this.zsetStore.delete(key);
+      this.geoStore.delete(key);
+      this.streamStore.delete(key);
     }
   }
 
@@ -140,6 +174,8 @@ export class InMemoryStorage implements IStorage {
     this.listStore.delete(key);
     this.setStore.delete(key);
     this.zsetStore.delete(key);
+    this.geoStore.delete(key);
+    this.streamStore.delete(key);
     return result;
   }
 
@@ -161,6 +197,8 @@ export class InMemoryStorage implements IStorage {
     this.listStore.clear();
     this.setStore.clear();
     this.zsetStore.clear();
+    this.geoStore.clear();
+    this.streamStore.clear();
   }
 
   // === Multi-key ===
@@ -403,6 +441,14 @@ export class InMemoryStorage implements IStorage {
       this.zsetStore.set(newKey, this.zsetStore.get(oldKey)!);
       this.zsetStore.delete(oldKey);
     }
+    if (this.geoStore.has(oldKey)) {
+      this.geoStore.set(newKey, this.geoStore.get(oldKey)!);
+      this.geoStore.delete(oldKey);
+    }
+    if (this.streamStore.has(oldKey)) {
+      this.streamStore.set(newKey, this.streamStore.get(oldKey)!);
+      this.streamStore.delete(oldKey);
+    }
   }
 
   async renamenx(oldKey: string, newKey: string): Promise<boolean> {
@@ -470,6 +516,38 @@ export class InMemoryStorage implements IStorage {
         this.zsetStore.set(destination, new Map(members));
       }
     }
+    if (entry.type === 'zset') {
+      const geoCoords = this.geoStore.get(source);
+      if (geoCoords) {
+        this.geoStore.set(destination, new Map(geoCoords));
+      }
+    }
+    if (entry.type === 'stream') {
+      const streamData = this.streamStore.get(source);
+      if (streamData) {
+        // Deep copy the stream data
+        const newGroups = new Map<string, InternalStreamGroup>();
+        for (const [gName, group] of streamData.groups) {
+          const newConsumers = new Map<string, InternalStreamConsumer>();
+          for (const [cName, consumer] of group.consumers) {
+            newConsumers.set(cName, { ...consumer });
+          }
+          newGroups.set(gName, {
+            ...group,
+            consumers: newConsumers,
+            pending: group.pending.map(p => ({ ...p })),
+          });
+        }
+        this.streamStore.set(destination, {
+          entries: streamData.entries.map(e => ({ ...e, fields: { ...e.fields } })),
+          groups: newGroups,
+          lastId: streamData.lastId,
+          maxDeletedId: streamData.maxDeletedId,
+          entriesAdded: streamData.entriesAdded,
+          recordedFirstId: streamData.recordedFirstId,
+        });
+      }
+    }
     return true;
   }
 
@@ -489,6 +567,8 @@ export class InMemoryStorage implements IStorage {
         this.listStore.delete(key);
         this.setStore.delete(key);
         this.zsetStore.delete(key);
+        this.geoStore.delete(key);
+        this.streamStore.delete(key);
         count++;
       }
     }
@@ -3834,6 +3914,1291 @@ export class InMemoryStorage implements IStorage {
       }
     }
     return result;
+  }
+
+  // === GEO helpers ===
+
+  private ensureGeoTypeOrThrow(key: string): void {
+    const entry = this.store.get(key);
+    if (entry && entry.type !== 'zset') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+  }
+
+  private unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {
+    switch (unit) {
+      case 'km': return 1000;
+      case 'ft': return 0.3048;
+      case 'mi': return 1609.34;
+      case 'm':
+      default: return 1;
+    }
+  }
+
+  // === GEO operations ===
+
+  async geoadd(key: string, members: Array<{ longitude: number; latitude: number; member: string }>, options?: { nx?: boolean; xx?: boolean; ch?: boolean }): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+
+    // Validate coordinates
+    for (const { longitude, latitude } of members) {
+      if (longitude < -180 || longitude > 180) {
+        throw new Error('ERR invalid longitude,valid range is [-180,180]');
+      }
+      if (latitude < -85.05112878 || latitude > 85.05112878) {
+        throw new Error('ERR invalid latitude,valid range is [-85.05112878,85.05112878]');
+      }
+    }
+
+    if (!this.store.has(key)) {
+      this.store.set(key, { value: '', type: 'zset', expiresAt: null });
+    }
+    if (!this.zsetStore.has(key)) {
+      this.zsetStore.set(key, new Map());
+    }
+    if (!this.geoStore.has(key)) {
+      this.geoStore.set(key, new Map());
+    }
+
+    const zset = this.zsetStore.get(key)!;
+    const geoData = this.geoStore.get(key)!;
+    let added = 0;
+    let changed = 0;
+
+    for (const { longitude, latitude, member } of members) {
+      const hash = encodeGeohash(longitude, latitude);
+
+      if (zset.has(member)) {
+        // Member already exists
+        if (options?.nx) continue; // NX: only add new members
+        if (options?.xx) {
+          // XX: only update existing members
+          const oldScore = zset.get(member)!;
+          if (oldScore !== hash) {
+            changed++;
+          }
+          zset.set(member, hash);
+          geoData.set(member, { longitude, latitude });
+        } else {
+          // Default: update
+          const oldScore = zset.get(member)!;
+          if (oldScore !== hash) {
+            changed++;
+          }
+          zset.set(member, hash);
+          geoData.set(member, { longitude, latitude });
+        }
+      } else {
+        // Member doesn't exist
+        if (options?.xx) continue; // XX: only update existing members
+        zset.set(member, hash);
+        geoData.set(member, { longitude, latitude });
+        added++;
+      }
+    }
+
+    return options?.ch ? added + changed : added;
+  }
+
+  async geohash(key: string, members: string[]): Promise<(string | null)[]> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+    const zset = this.zsetStore.get(key);
+    if (!zset) {
+      return members.map(() => null);
+    }
+    return members.map(member => {
+      const score = zset.get(member);
+      if (score === undefined) return null;
+      return geohashToString(score);
+    });
+  }
+
+  async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+    const geoData = this.geoStore.get(key);
+    const zset = this.zsetStore.get(key);
+    return members.map(member => {
+      // Try geoStore first
+      if (geoData && geoData.has(member)) {
+        const { longitude, latitude } = geoData.get(member)!;
+        return [longitude, latitude];
+      }
+      // Fallback: decode from score
+      if (zset && zset.has(member)) {
+        const score = zset.get(member)!;
+        const { longitude, latitude } = decodeGeohash(score);
+        return [longitude, latitude];
+      }
+      return null;
+    });
+  }
+
+  async geodist(key: string, member1: string, member2: string, unit: 'm' | 'km' | 'ft' | 'mi' = 'm'): Promise<number | null> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+    const geoData = this.geoStore.get(key);
+    const zset = this.zsetStore.get(key);
+    if (!zset) return null;
+
+    const getCoords = (member: string): { longitude: number; latitude: number } | null => {
+      if (geoData && geoData.has(member)) {
+        return geoData.get(member)!;
+      }
+      if (zset.has(member)) {
+        return decodeGeohash(zset.get(member)!);
+      }
+      return null;
+    };
+
+    const coord1 = getCoords(member1);
+    const coord2 = getCoords(member2);
+    if (!coord1 || !coord2) return null;
+
+    return calculateDistance(coord1.longitude, coord1.latitude, coord2.longitude, coord2.latitude, unit);
+  }
+
+  async georadius(key: string, longitude: number, latitude: number, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+    const zset = this.zsetStore.get(key);
+    const geoData = this.geoStore.get(key);
+    if (!zset || zset.size === 0) return [];
+
+    const radiusMeters = radius * this.unitToMeters(unit);
+    const sort = options?.sort ?? 'ASC';
+
+    const getCoords = (member: string): { longitude: number; latitude: number } | null => {
+      if (geoData && geoData.has(member)) {
+        return geoData.get(member)!;
+      }
+      if (zset.has(member)) {
+        return decodeGeohash(zset.get(member)!);
+      }
+      return null;
+    };
+
+    // Filter within bounding box then radius
+    const bbox = getBoundingBox(longitude, latitude, radiusMeters);
+    let results: GeoSearchResult[] = [];
+
+    for (const [member, score] of zset) {
+      const coords = getCoords(member);
+      if (!coords) continue;
+
+      // Bounding box pre-filter
+      if (coords.longitude < bbox.minLon || coords.longitude > bbox.maxLon ||
+          coords.latitude < bbox.minLat || coords.latitude > bbox.maxLat) continue;
+
+      // Accurate radius check
+      if (!isInRadius(longitude, latitude, radiusMeters, coords.longitude, coords.latitude)) continue;
+
+      const result: GeoSearchResult = { member, score };
+      if (options?.withDist) {
+        result.distance = calculateDistance(longitude, latitude, coords.longitude, coords.latitude, unit);
+      }
+      if (options?.withCoord) {
+        result.longitude = coords.longitude;
+        result.latitude = coords.latitude;
+      }
+      if (options?.withHash) {
+        result.geohash = geohashToString(score);
+      }
+      results.push(result);
+    }
+
+    // Sort by distance from center
+    results.sort((a, b) => {
+      const distA = calculateDistance(longitude, latitude,
+        getCoords(a.member)!.longitude, getCoords(a.member)!.latitude, 'm');
+      const distB = calculateDistance(longitude, latitude,
+        getCoords(b.member)!.longitude, getCoords(b.member)!.latitude, 'm');
+      return sort === 'ASC' ? distA - distB : distB - distA;
+    });
+
+    // Apply count
+    if (options?.count !== undefined) {
+      results = results.slice(0, options.count);
+    }
+
+    // Handle store/storeDist
+    if (options?.store) {
+      this.evictIfExpired(options.store);
+      this.ensureGeoTypeOrThrow(options.store);
+      if (!this.store.has(options.store)) {
+        this.store.set(options.store, { value: '', type: 'zset', expiresAt: null });
+      }
+      if (!this.zsetStore.has(options.store)) {
+        this.zsetStore.set(options.store, new Map());
+      }
+      if (!this.geoStore.has(options.store)) {
+        this.geoStore.set(options.store, new Map());
+      }
+      const destZset = this.zsetStore.get(options.store)!;
+      const destGeo = this.geoStore.get(options.store)!;
+      destZset.clear();
+      destGeo.clear();
+      for (const r of results) {
+        const coords = getCoords(r.member)!;
+        destZset.set(r.member, r.score);
+        destGeo.set(r.member, coords);
+      }
+      return results;
+    }
+
+    if (options?.storeDist) {
+      this.evictIfExpired(options.storeDist!);
+      this.ensureGeoTypeOrThrow(options.storeDist!);
+      if (!this.store.has(options.storeDist)) {
+        this.store.set(options.storeDist, { value: '', type: 'zset', expiresAt: null });
+      }
+      if (!this.zsetStore.has(options.storeDist)) {
+        this.zsetStore.set(options.storeDist, new Map());
+      }
+      const destZset = this.zsetStore.get(options.storeDist)!;
+      destZset.clear();
+      for (const r of results) {
+        const dist = r.distance ?? calculateDistance(longitude, latitude,
+          getCoords(r.member)!.longitude, getCoords(r.member)!.latitude, unit);
+        destZset.set(r.member, dist);
+      }
+      return results;
+    }
+
+    return results;
+  }
+
+  async georadiusbymember(key: string, member: string, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+    const geoData = this.geoStore.get(key);
+    const zset = this.zsetStore.get(key);
+    if (!zset || !zset.has(member)) return [];
+
+    const getCoords = (m: string): { longitude: number; latitude: number } | null => {
+      if (geoData && geoData.has(m)) {
+        return geoData.get(m)!;
+      }
+      if (zset.has(m)) {
+        return decodeGeohash(zset.get(m)!);
+      }
+      return null;
+    };
+
+    const coords = getCoords(member);
+    if (!coords) return [];
+
+    return this.georadius(key, coords.longitude, coords.latitude, radius, unit, options);
+  }
+
+  async geosearch(key: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean }): Promise<GeoSearchResult[]> {
+    this.evictIfExpired(key);
+    this.ensureGeoTypeOrThrow(key);
+    const zset = this.zsetStore.get(key);
+    const geoData = this.geoStore.get(key);
+    if (!zset || zset.size === 0) return [];
+
+    // Determine center point
+    let centerLon: number;
+    let centerLat: number;
+
+    if (options.fromMember) {
+      const memberCoords = geoData?.get(options.fromMember) ?? (zset.has(options.fromMember) ? decodeGeohash(zset.get(options.fromMember)!) : null);
+      if (!memberCoords) return [];
+      centerLon = memberCoords.longitude;
+      centerLat = memberCoords.latitude;
+    } else {
+      centerLon = options.fromLongitude ?? 0;
+      centerLat = options.fromLatitude ?? 0;
+    }
+
+    const getCoords = (member: string): { longitude: number; latitude: number } | null => {
+      if (geoData && geoData.has(member)) {
+        return geoData.get(member)!;
+      }
+      if (zset.has(member)) {
+        return decodeGeohash(zset.get(member)!);
+      }
+      return null;
+    };
+
+    let results: GeoSearchResult[] = [];
+
+    if (options.byRadius) {
+      const radiusMeters = options.byRadius.radius * this.unitToMeters(options.byRadius.unit);
+      const bbox = getBoundingBox(centerLon, centerLat, radiusMeters);
+
+      for (const [member, score] of zset) {
+        const coords = getCoords(member);
+        if (!coords) continue;
+        if (coords.longitude < bbox.minLon || coords.longitude > bbox.maxLon ||
+            coords.latitude < bbox.minLat || coords.latitude > bbox.maxLat) continue;
+        if (!isInRadius(centerLon, centerLat, radiusMeters, coords.longitude, coords.latitude)) continue;
+
+        const result: GeoSearchResult = { member, score };
+        if (options.withDist) {
+          result.distance = calculateDistance(centerLon, centerLat, coords.longitude, coords.latitude,
+            options.byRadius!.unit);
+        }
+        if (options.withCoord) {
+          result.longitude = coords.longitude;
+          result.latitude = coords.latitude;
+        }
+        if (options.withHash) {
+          result.geohash = geohashToString(score);
+        }
+        results.push(result);
+      }
+    } else if (options.byBox) {
+      const widthMeters = options.byBox.width * this.unitToMeters(options.byBox.unit);
+      const heightMeters = options.byBox.height * this.unitToMeters(options.byBox.unit);
+      const halfHeightM = heightMeters / 2;
+      const halfWidthM = widthMeters / 2;
+
+      // Compute bounding box
+      const latDegPerM = 1 / 110540;
+      const lonDegPerM = 1 / (111320 * Math.cos(centerLat * Math.PI / 180));
+      const bbox = {
+        minLon: centerLon - halfWidthM * lonDegPerM,
+        maxLon: centerLon + halfWidthM * lonDegPerM,
+        minLat: centerLat - halfHeightM * latDegPerM,
+        maxLat: centerLat + halfHeightM * latDegPerM
+      };
+
+      for (const [member, score] of zset) {
+        const coords = getCoords(member);
+        if (!coords) continue;
+        if (coords.longitude < bbox.minLon || coords.longitude > bbox.maxLon ||
+            coords.latitude < bbox.minLat || coords.latitude > bbox.maxLat) continue;
+
+        const result: GeoSearchResult = { member, score };
+        if (options.withDist) {
+          result.distance = calculateDistance(centerLon, centerLat, coords.longitude, coords.latitude,
+            options.byBox!.unit);
+        }
+        if (options.withCoord) {
+          result.longitude = coords.longitude;
+          result.latitude = coords.latitude;
+        }
+        if (options.withHash) {
+          result.geohash = geohashToString(score);
+        }
+        results.push(result);
+      }
+    } else {
+      return [];
+    }
+
+    // Sort
+    const sort = options.sort ?? 'ASC';
+    results.sort((a, b) => {
+      const distA = calculateDistance(centerLon, centerLat,
+        getCoords(a.member)!.longitude, getCoords(a.member)!.latitude, 'm');
+      const distB = calculateDistance(centerLon, centerLat,
+        getCoords(b.member)!.longitude, getCoords(b.member)!.latitude, 'm');
+      return sort === 'ASC' ? distA - distB : distB - distA;
+    });
+
+    // Apply count
+    if (options.count !== undefined) {
+      results = results.slice(0, options.count);
+    }
+
+    return results;
+  }
+
+  async geosearchstore(destination: string, source: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean }): Promise<number> {
+    this.evictIfExpired(destination);
+    this.evictIfExpired(source);
+
+    const searchResults = await this.geosearch(source, {
+      fromMember: options.fromMember,
+      fromLongitude: options.fromLongitude,
+      fromLatitude: options.fromLatitude,
+      byRadius: options.byRadius,
+      byBox: options.byBox,
+      sort: options.sort,
+      count: options.count,
+      any: options.any,
+      withDist: options.storeDist, // Need distance for storeDist
+      withCoord: true, // Need coordinates for geoStore
+    });
+
+    if (searchResults.length === 0) {
+      // Clean up or create empty destination
+      const destEntry = this.store.get(destination);
+      if (destEntry && destEntry.type === 'zset') {
+        this.zsetStore.delete(destination);
+        this.geoStore.delete(destination);
+        this.store.delete(destination);
+      }
+      return 0;
+    }
+
+    // Create/update destination zset
+    this.ensureZsetKeyExists(destination);
+    const destZset = this.zsetStore.get(destination)!;
+    const destGeo = this.geoStore.has(destination) ? this.geoStore.get(destination)! : new Map<string, { longitude: number; latitude: number }>();
+    if (!this.geoStore.has(destination)) {
+      this.geoStore.set(destination, destGeo);
+    }
+    destZset.clear();
+    destGeo.clear();
+
+    // Need source geoData for coordinate lookup
+    const sourceGeoData = this.geoStore.get(source);
+    const sourceZset = this.zsetStore.get(source);
+
+    const getSourceCoords = (member: string): { longitude: number; latitude: number } | null => {
+      if (sourceGeoData && sourceGeoData.has(member)) {
+        return sourceGeoData.get(member)!;
+      }
+      if (sourceZset && sourceZset.has(member)) {
+        return decodeGeohash(sourceZset.get(member)!);
+      }
+      return null;
+    };
+
+    for (const r of searchResults) {
+      if (options.storeDist) {
+        const dist = r.distance ?? 0;
+        destZset.set(r.member, dist);
+      } else {
+        destZset.set(r.member, r.score);
+      }
+      const coords = r.longitude !== undefined && r.latitude !== undefined
+        ? { longitude: r.longitude, latitude: r.latitude }
+        : getSourceCoords(r.member);
+      if (coords) {
+        destGeo.set(r.member, coords);
+      }
+    }
+
+    return searchResults.length;
+  }
+
+  // === Stream helpers ===
+
+  private ensureStreamTypeOrThrow(key: string): void {
+    const entry = this.store.get(key);
+    if (entry && entry.type !== 'stream') {
+      throw new Error('WRONGTYPE Operation against a key holding the wrong kind of value');
+    }
+  }
+
+  private ensureStreamKeyExists(key: string): void {
+    if (!this.store.has(key)) {
+      this.store.set(key, { value: '', type: 'stream', expiresAt: null });
+    }
+    if (!this.streamStore.has(key)) {
+      this.streamStore.set(key, { entries: [], groups: new Map(), lastId: '0-0', maxDeletedId: '0-0', entriesAdded: 0, recordedFirstId: '0-0' });
+    }
+  }
+
+  private cleanupStreamIfEmpty(key: string): void {
+    const entry = this.store.get(key);
+    if (!entry || entry.type !== 'stream') return;
+    const stream = this.streamStore.get(key);
+    if (stream && stream.entries.length === 0 && stream.groups.size === 0) {
+      this.streamStore.delete(key);
+      this.store.delete(key);
+    }
+  }
+
+  private parseStreamId(id: string): { ms: number; seq: number } {
+    if (id === '-') return { ms: 0, seq: 0 };
+    if (id === '+') return { ms: Infinity, seq: Infinity };
+    const parts = id.split('-');
+    return { ms: parseInt(parts[0], 10), seq: parseInt(parts[1], 10) };
+  }
+
+  private formatStreamId(ms: number, seq: number): string {
+    return `${ms}-${seq}`;
+  }
+
+  private compareStreamId(a: string, b: string): number {
+    const pa = this.parseStreamId(a);
+    const pb = this.parseStreamId(b);
+    if (pa.ms !== pb.ms) return pa.ms - pb.ms;
+    return pa.seq - pb.seq;
+  }
+
+  private generateStreamId(key: string, id: string): string | null {
+    const stream = this.streamStore.get(key);
+    const lastId = stream ? stream.lastId : '0-0';
+
+    if (id === '*') {
+      const now = Date.now();
+      const lastParsed = this.parseStreamId(lastId);
+      if (now > lastParsed.ms) {
+        return this.formatStreamId(now, 0);
+      } else {
+        // Same ms as last or earlier, increment seq
+        return this.formatStreamId(lastParsed.ms, lastParsed.seq + 1);
+      }
+    }
+
+    // Handle id with explicit ms and auto seq (e.g., "12345-*")
+    if (id.endsWith('-*')) {
+      const ms = parseInt(id.slice(0, -2), 10);
+      const lastParsed = this.parseStreamId(lastId);
+      if (ms > lastParsed.ms) {
+        return this.formatStreamId(ms, 0);
+      } else if (ms === lastParsed.ms) {
+        return this.formatStreamId(ms, lastParsed.seq + 1);
+      } else {
+        // ms is less than lastId's ms — can't use
+        return null;
+      }
+    }
+
+    // Explicit id
+    if (this.compareStreamId(id, lastId) <= 0) {
+      return null; // id <= lastId, not valid
+    }
+    return id;
+  }
+
+  private binarySearchStreamEntry(entries: StreamEntry[], id: string, findFirst: boolean): number {
+    let left = 0;
+    let right = entries.length;
+    const parsedId = this.parseStreamId(id);
+
+    while (left < right) {
+      const mid = (left + right) >> 1;
+      const midParsed = this.parseStreamId(entries[mid].id);
+      const cmp = midParsed.ms !== parsedId.ms ? midParsed.ms - parsedId.ms : midParsed.seq - parsedId.seq;
+      if (findFirst ? cmp < 0 : cmp <= 0) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+    return left;
+  }
+
+  // === Stream operations ===
+
+  async xadd(key: string, id: string, fields: Record<string, string>, options?: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean }): Promise<string | null> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    // NOMKSTREAM: don't create the stream if it doesn't exist
+    if (options?.nomkstream && !this.store.has(key)) {
+      return null;
+    }
+
+    this.ensureStreamKeyExists(key);
+    const stream = this.streamStore.get(key)!;
+
+    const generatedId = this.generateStreamId(key, id);
+    if (generatedId === null) {
+      throw new Error('ERR The ID specified in XADD is equal or smaller than the target stream top item');
+    }
+
+    const entry: StreamEntry = {
+      id: generatedId,
+      fields: { ...fields },
+      createdAt: Date.now(),
+    };
+
+    stream.entries.push(entry);
+    stream.lastId = generatedId;
+    stream.entriesAdded++;
+
+    // Update recordedFirstId if this is the first entry
+    if (stream.entries.length === 1 || stream.recordedFirstId === '0-0') {
+      stream.recordedFirstId = generatedId;
+    }
+
+    // Handle trimming
+    if (options?.maxlen !== undefined) {
+      await this.xtrim(key, 'MAXLEN', options.maxlen, options.approx ?? false);
+    } else if (options?.minid !== undefined) {
+      await this.xtrim(key, 'MINID', options.minid, options.approx ?? false);
+    }
+
+    return generatedId;
+  }
+
+  async xtrim(key: string, strategy: 'MAXLEN' | 'MINID', threshold: string | number, approx?: boolean, limit?: number): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream || stream.entries.length === 0) return 0;
+
+    let removeCount = 0;
+
+    if (strategy === 'MAXLEN') {
+      const maxLen = typeof threshold === 'number' ? threshold : parseInt(String(threshold), 10);
+      if (stream.entries.length <= maxLen) return 0;
+      removeCount = stream.entries.length - maxLen;
+      if (limit !== undefined && removeCount > limit) {
+        removeCount = limit;
+      }
+      stream.entries.splice(0, removeCount);
+    } else {
+      // MINID strategy
+      const minId = String(threshold);
+      const firstToKeep = stream.entries.findIndex(e => this.compareStreamId(e.id, minId) >= 0);
+      if (firstToKeep === 0) return 0; // All entries are >= minId
+      if (firstToKeep === -1) {
+        // All entries are < minId — remove all
+        removeCount = stream.entries.length;
+        if (limit !== undefined && removeCount > limit) removeCount = limit;
+      } else {
+        removeCount = firstToKeep;
+        if (limit !== undefined && removeCount > limit) removeCount = limit;
+      }
+      if (removeCount > 0) {
+        // Update maxDeletedId
+        for (let i = 0; i < removeCount; i++) {
+          const deletedId = stream.entries[i].id;
+          if (this.compareStreamId(deletedId, stream.maxDeletedId) > 0) {
+            stream.maxDeletedId = deletedId;
+          }
+        }
+        stream.entries.splice(0, removeCount);
+      }
+    }
+
+    // Update recordedFirstId
+    if (stream.entries.length > 0) {
+      stream.recordedFirstId = stream.entries[0].id;
+    }
+
+    return removeCount;
+  }
+
+  async xdel(key: string, ids: string[]): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) return 0;
+
+    let removed = 0;
+    for (const id of ids) {
+      const idx = stream.entries.findIndex(e => e.id === id);
+      if (idx !== -1) {
+        stream.entries.splice(idx, 1);
+        removed++;
+        if (this.compareStreamId(id, stream.maxDeletedId) > 0) {
+          stream.maxDeletedId = id;
+        }
+      }
+    }
+
+    // Update recordedFirstId
+    if (stream.entries.length > 0) {
+      stream.recordedFirstId = stream.entries[0].id;
+    }
+
+    this.cleanupStreamIfEmpty(key);
+    return removed;
+  }
+
+  async xrange(key: string, start: string, end: string, count?: number): Promise<StreamEntry[]> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream || stream.entries.length === 0) return [];
+
+    const startId = start === '-' ? '0-0' : start;
+    const endId = end === '+' ? stream.lastId : end;
+
+    let results: StreamEntry[] = [];
+    for (const entry of stream.entries) {
+      if (this.compareStreamId(entry.id, startId) >= 0 && this.compareStreamId(entry.id, endId) <= 0) {
+        results.push(entry);
+      }
+    }
+
+    if (count !== undefined && count > 0) {
+      results = results.slice(0, count);
+    }
+
+    return results;
+  }
+
+  async xrevrange(key: string, end: string, start: string, count?: number): Promise<StreamEntry[]> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream || stream.entries.length === 0) return [];
+
+    const startId = start === '-' ? '0-0' : start;
+    const endId = end === '+' ? stream.lastId : end;
+
+    let results: StreamEntry[] = [];
+    for (let i = stream.entries.length - 1; i >= 0; i--) {
+      const entry = stream.entries[i];
+      if (this.compareStreamId(entry.id, startId) >= 0 && this.compareStreamId(entry.id, endId) <= 0) {
+        results.push(entry);
+      }
+    }
+
+    if (count !== undefined && count > 0) {
+      results = results.slice(0, count);
+    }
+
+    return results;
+  }
+
+  async xlen(key: string): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+    const stream = this.streamStore.get(key);
+    return stream ? stream.entries.length : 0;
+  }
+
+  async xread(keys: string[], ids: string[], count?: number): Promise<Array<{ key: string; entries: StreamEntry[] }> | null> {
+    const results: Array<{ key: string; entries: StreamEntry[] }> = [];
+
+    for (let i = 0; i < keys.length; i++) {
+      this.evictIfExpired(keys[i]);
+      this.ensureStreamTypeOrThrow(keys[i]);
+      const stream = this.streamStore.get(keys[i]);
+      if (!stream || stream.entries.length === 0) continue;
+
+      const startId = ids[i] === '$' ? stream.lastId : ids[i];
+      const entries: StreamEntry[] = [];
+
+      for (const entry of stream.entries) {
+        if (this.compareStreamId(entry.id, startId) > 0) {
+          entries.push(entry);
+          if (count !== undefined && entries.length >= count) break;
+        }
+      }
+
+      if (entries.length > 0) {
+        results.push({ key: keys[i], entries });
+      }
+    }
+
+    return results.length > 0 ? results : null;
+  }
+
+  async xgroupCreate(key: string, group: string, id: string, mkstream?: boolean): Promise<string> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    if (mkstream) {
+      this.ensureStreamKeyExists(key);
+    }
+
+    const stream = this.streamStore.get(key);
+    if (!stream) {
+      throw new Error('ERR no such key');
+    }
+
+    if (stream.groups.has(group)) {
+      throw new Error('BUSYGROUP Consumer Group name already exists');
+    }
+
+    const lastDeliveredId = id === '$' ? stream.lastId : id;
+
+    stream.groups.set(group, {
+      name: group,
+      lastDeliveredId,
+      entriesRead: stream.entries.length,
+      consumers: new Map(),
+      pending: [],
+    });
+
+    return 'OK';
+  }
+
+  async xgroupDestroy(key: string, group: string): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) return 0;
+
+    return stream.groups.delete(group) ? 1 : 0;
+  }
+
+  async xgroupCreateconsumer(key: string, group: string, consumer: string): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    if (grp.consumers.has(consumer)) return 0;
+
+    grp.consumers.set(consumer, {
+      name: consumer,
+      seenTime: Date.now(),
+      pendingCount: 0,
+      lastDeliveredId: '0-0',
+      lastAckTime: 0,
+    });
+
+    return 1;
+  }
+
+  async xgroupDelconsumer(key: string, group: string, consumer: string): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    const c = grp.consumers.get(consumer);
+    if (!c) return 0;
+
+    // Count pending entries for this consumer in this group
+    const pendingCount = grp.pending.filter(p => p.consumer === consumer).length;
+
+    // Remove consumer
+    grp.consumers.delete(consumer);
+
+    // Remove pending entries for this consumer
+    grp.pending = grp.pending.filter(p => p.consumer !== consumer);
+
+    return pendingCount;
+  }
+
+  async xgroupSetid(key: string, group: string, id: string): Promise<string> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    grp.lastDeliveredId = id === '$' ? stream.lastId : id;
+    return 'OK';
+  }
+
+  async xreadgroup(group: string, consumer: string, keys: string[], ids: string[], count?: number, noack?: boolean): Promise<Array<{ key: string; entries: StreamEntry[] }> | null> {
+    const results: Array<{ key: string; entries: StreamEntry[] }> = [];
+
+    for (let i = 0; i < keys.length; i++) {
+      this.evictIfExpired(keys[i]);
+      this.ensureStreamTypeOrThrow(keys[i]);
+
+      const stream = this.streamStore.get(keys[i]);
+      if (!stream) continue;
+
+      const grp = stream.groups.get(group);
+      if (!grp) continue;
+
+      // Ensure consumer exists
+      if (!grp.consumers.has(consumer)) {
+        grp.consumers.set(consumer, {
+          name: consumer,
+          seenTime: Date.now(),
+          pendingCount: 0,
+          lastDeliveredId: '0-0',
+          lastAckTime: 0,
+        });
+      }
+
+      const c = grp.consumers.get(consumer)!;
+      c.seenTime = Date.now();
+
+      const idArg = ids[i];
+
+      if (idArg === '>') {
+        // New entries: deliver entries after the group's lastDeliveredId
+        const entries: StreamEntry[] = [];
+        for (const entry of stream.entries) {
+          if (this.compareStreamId(entry.id, grp.lastDeliveredId) > 0) {
+            entries.push(entry);
+            if (count !== undefined && entries.length >= count) break;
+          }
+        }
+
+        // Mark as pending
+        for (const entry of entries) {
+          if (!noack) {
+            grp.pending.push({
+              id: entry.id,
+              consumer,
+              group,
+              deliveredTime: Date.now(),
+              deliveryCount: 1,
+              lastDeliveredTime: Date.now(),
+            });
+          }
+          c.pendingCount++;
+        }
+
+        // Update group's lastDeliveredId
+        if (entries.length > 0) {
+          grp.lastDeliveredId = entries[entries.length - 1].id;
+          grp.entriesRead += entries.length;
+        }
+
+        c.lastDeliveredId = grp.lastDeliveredId;
+
+        if (entries.length > 0) {
+          results.push({ key: keys[i], entries });
+        }
+      } else {
+        // Pending entries for this consumer: deliver entries with id > specified id
+        // that are in the pending list for this consumer
+        const startId = idArg === '0' ? '0-0' : idArg;
+        const entries: StreamEntry[] = [];
+
+        for (const pending of grp.pending) {
+          if (pending.consumer === consumer && this.compareStreamId(pending.id, startId) > 0) {
+            const streamEntry = stream.entries.find(e => e.id === pending.id);
+            if (streamEntry) {
+              entries.push(streamEntry);
+              if (count !== undefined && entries.length >= count) break;
+            }
+          }
+        }
+
+        c.lastDeliveredId = entries.length > 0 ? entries[entries.length - 1].id : c.lastDeliveredId;
+
+        if (entries.length > 0) {
+          results.push({ key: keys[i], entries });
+        }
+      }
+    }
+
+    return results.length > 0 ? results : null;
+  }
+
+  async xack(key: string, group: string, ids: string[]): Promise<number> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) return 0;
+
+    const grp = stream.groups.get(group);
+    if (!grp) return 0;
+
+    let acknowledged = 0;
+    const idSet = new Set(ids);
+
+    // Remove from pending
+    const originalLength = grp.pending.length;
+    grp.pending = grp.pending.filter(p => {
+      if (idSet.has(p.id)) {
+        acknowledged++;
+        // Decrement consumer's pending count
+        const c = grp.consumers.get(p.consumer);
+        if (c) {
+          c.pendingCount = Math.max(0, c.pendingCount - 1);
+        }
+        return false;
+      }
+      return true;
+    });
+
+    return acknowledged;
+  }
+
+  async xpending(key: string, group: string, options?: { start?: string; end?: string; count?: number; consumer?: string; idle?: number }): Promise<PendingEntry[] | { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> }> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    if (options?.start !== undefined || options?.end !== undefined || options?.idle !== undefined) {
+      // Detailed mode
+      let pending = grp.pending;
+
+      // Filter by idle time
+      if (options?.idle !== undefined) {
+        const now = Date.now();
+        const minIdle = options.idle;
+        pending = pending.filter(p => now - p.deliveredTime > minIdle);
+      }
+
+      // Filter by ID range
+      if (options?.start !== undefined && options?.end !== undefined) {
+        const startId = options.start === '-' ? '0-0' : options.start;
+        const endId = options.end === '+' ? '9999999999999-9999' : options.end;
+        pending = pending.filter(p => {
+          return this.compareStreamId(p.id, startId) >= 0 && this.compareStreamId(p.id, endId) <= 0;
+        });
+      }
+
+      // Filter by consumer
+      if (options?.consumer) {
+        pending = pending.filter(p => p.consumer === options.consumer);
+      }
+
+      // Apply count limit
+      if (options?.count !== undefined) {
+        pending = pending.slice(0, options.count);
+      }
+
+      return pending;
+    }
+
+    // Summary mode
+    const consumerMap = new Map<string, number>();
+    for (const p of grp.pending) {
+      consumerMap.set(p.consumer, (consumerMap.get(p.consumer) ?? 0) + 1);
+    }
+
+    const consumers = Array.from(consumerMap.entries()).map(([name, pending]) => ({ name, pending }));
+
+    return {
+      count: grp.pending.length,
+      minId: grp.pending.length > 0 ? grp.pending.reduce((min, p) => this.compareStreamId(p.id, min) < 0 ? p.id : min, grp.pending[0].id) : null,
+      maxId: grp.pending.length > 0 ? grp.pending.reduce((max, p) => this.compareStreamId(p.id, max) > 0 ? p.id : max, grp.pending[0].id) : null,
+      consumers,
+    };
+  }
+
+  async xclaim(key: string, group: string, consumer: string, minIdleTime: number, ids: string[], options?: { idle?: number; time?: number; retrycount?: number; force?: boolean; justid?: boolean }): Promise<StreamEntry[] | string[]> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    const now = Date.now();
+    const entries: StreamEntry[] = [];
+    const claimedIds: string[] = [];
+
+    // Ensure new consumer exists
+    if (!grp.consumers.has(consumer)) {
+      grp.consumers.set(consumer, {
+        name: consumer,
+        seenTime: now,
+        pendingCount: 0,
+        lastDeliveredId: '0-0',
+        lastAckTime: 0,
+      });
+    }
+
+    for (const id of ids) {
+      const pendingIdx = grp.pending.findIndex(p => p.id === id);
+      if (pendingIdx === -1) {
+        if (options?.force) {
+          // Force create pending entry even if not found
+          const entry = stream.entries.find(e => e.id === id);
+          if (entry) {
+            const newPending: PendingEntry = {
+              id,
+              consumer,
+              group,
+              deliveredTime: options?.time ?? now,
+              deliveryCount: 1,
+              lastDeliveredTime: options?.time ?? now,
+            };
+            grp.pending.push(newPending);
+            entries.push(entry);
+            claimedIds.push(id);
+            grp.consumers.get(consumer)!.pendingCount++;
+          }
+        }
+        continue;
+      }
+
+      const pending = grp.pending[pendingIdx];
+      const idleTime = now - pending.deliveredTime;
+
+      if (idleTime < minIdleTime) continue;
+
+      // Transfer from old consumer to new
+      const oldConsumer = grp.consumers.get(pending.consumer);
+      if (oldConsumer) {
+        oldConsumer.pendingCount = Math.max(0, oldConsumer.pendingCount - 1);
+      }
+
+      // Update pending entry
+      pending.consumer = consumer;
+      pending.deliveryCount = options?.retrycount ?? pending.deliveryCount + 1;
+
+      if (options?.idle !== undefined) {
+        pending.deliveredTime = now - options.idle;
+      } else if (options?.time !== undefined) {
+        pending.deliveredTime = options.time;
+      } else {
+        pending.deliveredTime = now;
+      }
+      pending.lastDeliveredTime = pending.deliveredTime;
+
+      grp.consumers.get(consumer)!.pendingCount++;
+
+      const entry = stream.entries.find(e => e.id === id);
+      if (entry) {
+        entries.push(entry);
+      }
+      claimedIds.push(id);
+    }
+
+    if (options?.justid) {
+      return claimedIds;
+    }
+
+    return entries;
+  }
+
+  async xautoclaim(key: string, group: string, consumer: string, minIdleTime: number, start: string, options?: { count?: number; justid?: boolean }): Promise<{ nextStartId: string; entries: StreamEntry[] | string[] }> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    const now = Date.now();
+    const startId = start === '-' ? '0-0' : start;
+
+    // Ensure new consumer exists
+    if (!grp.consumers.has(consumer)) {
+      grp.consumers.set(consumer, {
+        name: consumer,
+        seenTime: now,
+        pendingCount: 0,
+        lastDeliveredId: '0-0',
+        lastAckTime: 0,
+      });
+    }
+
+    const effectiveCount = options?.count ?? 100;
+    const claimedEntries: StreamEntry[] = [];
+    const claimedIds: string[] = [];
+    let nextStartId = '0-0';
+
+    // Sort pending by ID for scanning
+    const sortedPending = [...grp.pending].sort((a, b) => this.compareStreamId(a.id, b.id));
+
+    let count = 0;
+    for (const pending of sortedPending) {
+      if (count >= effectiveCount) {
+        nextStartId = pending.id;
+        break;
+      }
+
+      if (this.compareStreamId(pending.id, startId) < 0) continue;
+
+      const idleTime = now - pending.deliveredTime;
+      if (idleTime >= minIdleTime) {
+        // Transfer to new consumer
+        const oldConsumer = grp.consumers.get(pending.consumer);
+        if (oldConsumer) {
+          oldConsumer.pendingCount = Math.max(0, oldConsumer.pendingCount - 1);
+        }
+
+        pending.consumer = consumer;
+        pending.deliveryCount++;
+        pending.deliveredTime = now;
+        pending.lastDeliveredTime = now;
+        grp.consumers.get(consumer)!.pendingCount++;
+
+        const entry = stream.entries.find(e => e.id === pending.id);
+        if (entry) {
+          claimedEntries.push(entry);
+        }
+        claimedIds.push(pending.id);
+        count++;
+      }
+    }
+
+    return {
+      nextStartId,
+      entries: options?.justid ? claimedIds : claimedEntries,
+    };
+  }
+
+  async xinfoStream(key: string): Promise<StreamInfo> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    return {
+      length: stream.entries.length,
+      firstEntry: stream.entries.length > 0 ? stream.entries[0] : null,
+      lastEntry: stream.entries.length > 0 ? stream.entries[stream.entries.length - 1] : null,
+      maxDeletedEntryId: stream.maxDeletedId,
+      entriesAdded: stream.entriesAdded,
+      recordedFirstEntryId: stream.recordedFirstId,
+      groups: stream.groups.size,
+    };
+  }
+
+  async xinfoGroups(key: string): Promise<GroupInfo[]> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const result: GroupInfo[] = [];
+    for (const [name, grp] of stream.groups) {
+      result.push({
+        name,
+        consumers: grp.consumers.size,
+        pending: grp.pending.length,
+        lastDeliveredId: grp.lastDeliveredId,
+        entriesRead: grp.entriesRead,
+        lag: stream.entries.length - grp.entriesRead,
+      });
+    }
+    return result;
+  }
+
+  async xinfoConsumers(key: string, group: string): Promise<StreamConsumer[]> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    const grp = stream.groups.get(group);
+    if (!grp) throw new Error('ERR no such consumer group');
+
+    const now = Date.now();
+    const result: StreamConsumer[] = [];
+    for (const [name, c] of grp.consumers) {
+      result.push({
+        name: c.name,
+        pendingCount: c.pendingCount,
+        idleTime: now - c.seenTime,
+        lastDeliveredId: c.lastDeliveredId,
+        lastAckTime: c.lastAckTime,
+      });
+    }
+    return result;
+  }
+
+  async xsetid(key: string, id: string): Promise<string> {
+    this.evictIfExpired(key);
+    this.ensureStreamTypeOrThrow(key);
+
+    const stream = this.streamStore.get(key);
+    if (!stream) throw new Error('ERR no such key');
+
+    stream.lastId = id;
+    return 'OK';
   }
 
   // === Server / Persistence ===

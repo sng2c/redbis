@@ -2,6 +2,60 @@
 // 향후 다양한 스토리지 백엔드(SQLite, 메모리 등)를
 // 플러그인 형태로 교체할 수 있도록 추상화합니다.
 
+import type { GeoSearchResult } from '../utils/geo';
+export type { GeoSearchResult } from '../utils/geo';
+
+// === Stream types ===
+
+export interface StreamEntry {
+  id: string;           // Format: "<milliseconds>-<sequence>"
+  fields: Record<string, string>;  // field-value pairs
+  createdAt: number;    // timestamp (ms since epoch) when entry was added
+}
+
+export interface StreamConsumer {
+  name: string;
+  pendingCount: number;
+  idleTime: number;          // ms since last interaction
+  lastDeliveredId: string;
+  lastAckTime: number;
+}
+
+export interface StreamGroup {
+  name: string;
+  lastDeliveredId: string;
+  entriesRead: number;
+  consumers: Map<string, StreamConsumer>;
+}
+
+export interface PendingEntry {
+  id: string;
+  consumer: string;
+  group: string;
+  deliveredTime: number;       // ms since epoch when delivered
+  deliveryCount: number;
+  lastDeliveredTime: number;   // ms since epoch of last delivery
+}
+
+export interface StreamInfo {
+  length: number;
+  firstEntry: StreamEntry | null;
+  lastEntry: StreamEntry | null;
+  maxDeletedEntryId: string;
+  entriesAdded: number;
+  recordedFirstEntryId: string;
+  groups: number;
+}
+
+export interface GroupInfo {
+  name: string;
+  consumers: number;
+  pending: number;
+  lastDeliveredId: string;
+  entriesRead: number;
+  lag: number;
+}
+
 export interface IStorage {
   // === Existing (DO NOT CHANGE) ===
   get(key: string): Promise<string | null>;
@@ -198,6 +252,122 @@ export interface IStorage {
   jsonDebugMemory(key: string, path?: string): Promise<number | null>;
   jsonResp(key: string, path?: string): Promise<string | null>;
   jsonMerge(key: string, path: string, value: string): Promise<void>;
+
+  // === GEO operations ===
+
+  /**
+   * GEOADD: Add one or more geospatial members.
+   * Returns the number of new members added (or modified count with CH flag).
+   * longitude/latitude pairs validated against valid ranges.
+   */
+  geoadd(key: string, members: Array<{ longitude: number; latitude: number; member: string }>, options?: { nx?: boolean; xx?: boolean; ch?: boolean }): Promise<number>;
+
+  /**
+   * GEOHASH: Return geohash strings for the given members.
+   * Returns array of strings (null for non-existent members).
+   */
+  geohash(key: string, members: string[]): Promise<(string | null)[]>;
+
+  /**
+   * GEOPOS: Return [longitude, latitude] pairs for the given members.
+   * Returns array of [lon, lat] or null for non-existent members.
+   */
+  geopos(key: string, members: string[]): Promise<(Array<number> | null)[]>;
+
+  /**
+   * GEODIST: Return distance between two members in the given unit.
+   * Returns null if either member doesn't exist; distance as number.
+   */
+  geodist(key: string, member1: string, member2: string, unit?: 'm' | 'km' | 'ft' | 'mi'): Promise<number | null>;
+
+  /**
+   * GEORADIUS: Search by radius from a longitude/latitude point.
+   * Returns array of GeoSearchResult.
+   */
+  georadius(key: string, longitude: number, latitude: number, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]>;
+
+  /**
+   * GEORADIUSBYMEMBER: Search by radius from an existing member.
+   * Returns array of GeoSearchResult.
+   */
+  georadiusbymember(key: string, member: string, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]>;
+
+  /**
+   * GEOSEARCH: Search within area (by radius or by box) from a member or coordinates.
+   * Returns array of GeoSearchResult.
+   */
+  geosearch(key: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean }): Promise<GeoSearchResult[]>;
+
+  /**
+   * GEOSEARCHSTORE: Like GEOSEARCH but stores results in a destination key.
+   * Returns the number of results stored.
+   */
+  geosearchstore(destination: string, source: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean }): Promise<number>;
+
+  // === Stream operations ===
+
+  /** XADD: Add an entry to a stream. Returns the generated or validated ID. */
+  xadd(key: string, id: string, fields: Record<string, string>, options?: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean }): Promise<string | null>;
+
+  /** XTRIM: Trim the stream. Returns the number of entries removed. */
+  xtrim(key: string, strategy: 'MAXLEN' | 'MINID', threshold: string | number, approx?: boolean, limit?: number): Promise<number>;
+
+  /** XDEL: Delete entries. Returns the number of entries actually deleted. */
+  xdel(key: string, ids: string[]): Promise<number>;
+
+  /** XRANGE: Get entries in the given ID range. */
+  xrange(key: string, start: string, end: string, count?: number): Promise<StreamEntry[]>;
+
+  /** XREVRANGE: Get entries in reverse ID range. */
+  xrevrange(key: string, end: string, start: string, count?: number): Promise<StreamEntry[]>;
+
+  /** XLEN: Return the number of entries in the stream. */
+  xlen(key: string): Promise<number>;
+
+  /** XREAD: Read from one or more streams starting at the given IDs. */
+  xread(keys: string[], ids: string[], count?: number): Promise<Array<{ key: string; entries: StreamEntry[] }> | null>;
+
+  /** XGROUP CREATE: Create a consumer group. */
+  xgroupCreate(key: string, group: string, id: string, mkstream?: boolean): Promise<string>;
+
+  /** XGROUP DESTROY: Destroy a consumer group. Returns count of destroyed groups (0 or 1). */
+  xgroupDestroy(key: string, group: string): Promise<number>;
+
+  /** XGROUP CREATECONSUMER: Create a consumer in a group. Returns 1 if created, 0 if already exists. */
+  xgroupCreateconsumer(key: string, group: string, consumer: string): Promise<number>;
+
+  /** XGROUP DELCONSUMER: Delete a consumer. Returns number of pending entries that were re-assigned. */
+  xgroupDelconsumer(key: string, group: string, consumer: string): Promise<number>;
+
+  /** XGROUP SETID: Set the last delivered ID for a group. */
+  xgroupSetid(key: string, group: string, id: string): Promise<string>;
+
+  /** XREADGROUP: Read from a stream as a consumer group member. */
+  xreadgroup(group: string, consumer: string, keys: string[], ids: string[], count?: number, noack?: boolean): Promise<Array<{ key: string; entries: StreamEntry[] }> | null>;
+
+  /** XACK: Acknowledge messages. Returns number of entries acknowledged. */
+  xack(key: string, group: string, ids: string[]): Promise<number>;
+
+  /** XPENDING: Get pending entries summary or detailed list. */
+  xpending(key: string, group: string, options?: { start?: string; end?: string; count?: number; consumer?: string; idle?: number }): Promise<PendingEntry[] | { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> }>;
+
+  /** XCLAIM: Claim pending entries. Returns claimed entries. */
+  xclaim(key: string, group: string, consumer: string, minIdleTime: number, ids: string[], options?: { idle?: number; time?: number; retrycount?: number; force?: boolean; justid?: boolean }): Promise<StreamEntry[] | string[]>;
+
+  /** XAUTOCLAIM: Auto-claim pending entries. Returns nextStartId and entries. */
+  xautoclaim(key: string, group: string, consumer: string, minIdleTime: number, start: string, options?: { count?: number; justid?: boolean }): Promise<{ nextStartId: string; entries: StreamEntry[] | string[] }>;
+
+  /** XINFO STREAM: Get stream information. */
+  xinfoStream(key: string): Promise<StreamInfo>;
+
+  /** XINFO GROUPS: Get consumer group information for a stream. */
+  xinfoGroups(key: string): Promise<GroupInfo[]>;
+
+  /** XINFO CONSUMERS: Get consumer information for a group. */
+  xinfoConsumers(key: string, group: string): Promise<StreamConsumer[]>;
+
+  /** XSETID: Set the last-generated ID for a stream. */
+  xsetid(key: string, id: string): Promise<string>;
 
   // === Server / Persistence ===
 
