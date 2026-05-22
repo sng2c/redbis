@@ -384,10 +384,23 @@ export interface IStorage {
     store?: string;
   }): Promise<string[] | number>;
 
+  // === Conditional Delete ===
+
+  /** Conditional delete: delete key only if all conditions are met. Returns 1 if deleted, 0 if not. */
+  delex(key: string, conditions: Array<{ operator: string; value: string }>): Promise<number>;
+
+  // === Multi-Set with Expiry ===
+
+  /** Set multiple keys with expiry. Returns count of keys set. */
+  msetex(pairs: Array<{ key: string; seconds: number; value: string }>): Promise<number>;
+
   // === Server / Persistence ===
 
   /** Force a save/flush of data to persistent storage. No-op for InMemoryStorage. */
   save(): Promise<void>;
+
+  /** Background save. Returns 'OK'. */
+  bgsave(): Promise<string>;
 
   /** Return server info as a plain-text string (key:value lines). Section is optional (return all info if omitted). */
   info(section?: string): Promise<string>;

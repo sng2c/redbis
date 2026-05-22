@@ -33,6 +33,7 @@ export class CommandHandler {
   // Transaction state
   private inMulti: boolean = false;
   private multiQueue: string[][] = [];
+  private clientName: string = '';
 
   constructor(storage: IStorage, pubsub: PubSubManager, connId: string, send: (msg: string) => void) {
     this.storage = storage;
@@ -58,8 +59,8 @@ export class CommandHandler {
       if (command === 'MULTI') {
         return encodeError('MULTI calls can not be nested');
       }
-      if (command === 'EXEC' || command === 'DISCARD') {
-        // These control the transaction - fall through to dispatch
+      if (command === 'EXEC' || command === 'DISCARD' || command === 'RESET' || command === 'AUTH' || command === 'HELLO') {
+        // These control the transaction or connection - fall through to dispatch
       } else {
         this.multiQueue.push(args);
         return encodeSimpleString('QUEUED');
@@ -83,6 +84,7 @@ export class CommandHandler {
         case 'MULTI': return this.handleMulti();
         case 'EXEC': return await this.handleExec();
         case 'DISCARD': return this.handleDiscard();
+        case 'RESET': return this.handleReset();
 
         // Server commands
         case 'INFO': return await this.handleInfo(args.slice(1));
@@ -94,6 +96,15 @@ export class CommandHandler {
         case 'SLOWLOG': return this.handleSlowlog(args.slice(1));
         case 'MEMORY': return await this.handleMemory(args.slice(1));
         case 'DBSIZE': return await this.handleDbsize();
+
+        case 'AUTH': return this.handleAuth(args.slice(1));
+        case 'HELLO': return this.handleHello(args.slice(1));
+        case 'RESET': return this.handleReset();
+        case 'SELECT': return this.handleSelect(args.slice(1));
+        case 'CLIENT': return this.handleClient(args.slice(1));
+        case 'BGSAVE': return await this.handleBgsave();
+        case 'DELEX': return await this.handleDelex(args.slice(1));
+        case 'MSETEX': return await this.handleMsetex(args.slice(1));
 
         case 'PING':
           return this.ping(args.slice(1));
@@ -638,6 +649,10 @@ export class CommandHandler {
       'XCLAIM', 'XAUTOCLAIM', 'XINFO', 'XSETID',
       // Sort
       'SORT', 'SORT_RO',
+      // Connection / Server
+      'AUTH', 'HELLO', 'RESET', 'SELECT',
+      'CLIENT', 'BGSAVE',
+      'DELEX', 'MSETEX',
     ];
   }
 
@@ -889,6 +904,15 @@ export class CommandHandler {
         case 'RANDOMKEY': return await this.handleRandomkey();
         case 'UNLINK': return await this.handleUnlink(args.slice(1));
         case 'TOUCH': return await this.handleTouch(args.slice(1));
+
+        case 'AUTH': return this.handleAuth(args.slice(1));
+        case 'HELLO': return this.handleHello(args.slice(1));
+        case 'RESET': return this.handleReset();
+        case 'SELECT': return this.handleSelect(args.slice(1));
+        case 'CLIENT': return this.handleClient(args.slice(1));
+        case 'BGSAVE': return await this.handleBgsave();
+        case 'DELEX': return await this.handleDelex(args.slice(1));
+        case 'MSETEX': return await this.handleMsetex(args.slice(1));
         case 'SCAN': return await this.handleScan(args.slice(1));
         case 'EXPIRE': return await this.handleExpire(args.slice(1));
         case 'EXPIREAT': return await this.handleExpireat(args.slice(1));
@@ -1158,6 +1182,11 @@ export class CommandHandler {
           default: return encodeSimpleString('OK');
         }
       }
+      case 'RESETSTAT':
+        slowLog.length = 0;
+        return encodeSimpleString('OK');
+      case 'REWRITE':
+        return encodeError('CONFIG REWRITE is not supported. Redbis does not use a config file.');
       default:
         return encodeError('unknown subcommand');
     }
@@ -5368,6 +5397,113 @@ export class CommandHandler {
         return `-${e.message}\r\n`;
       }
       return encodeError(e.message);
+    }
+  }
+
+  // === DELEX ===
+  private async handleDelex(args: string[]): Promise<string> {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'DELEX' command");
+    const key = args[0];
+    const conditions: Array<{ operator: string; value: string }> = [];
+    let i = 1;
+    while (i + 2 < args.length) {
+      if (args[i].toUpperCase() !== 'IF') {
+        i++;
+        continue;
+      }
+      conditions.push({ operator: args[i + 1], value: args[i + 2] });
+      i += 3;
+    }
+    const result = await this.storage.delex(key, conditions);
+    return encodeInteger(result);
+  }
+
+  // === MSETEX ===
+  private async handleMsetex(args: string[]): Promise<string> {
+    if (args.length < 3 || (args.length) % 3 !== 0) {
+      return encodeError("wrong number of arguments for 'MSETEX' command");
+    }
+    const pairs: Array<{ key: string; seconds: number; value: string }> = [];
+    for (let i = 0; i < args.length; i += 3) {
+      const seconds = parseInt(args[i + 1]);
+      if (isNaN(seconds)) return encodeError('ERR value is not an integer or out of range');
+      pairs.push({ key: args[i], seconds, value: args[i + 2] });
+    }
+    const result = await this.storage.msetex(pairs);
+    return encodeInteger(result);
+  }
+
+  // === BGSAVE ===
+  private async handleBgsave(): Promise<string> {
+    const result = await this.storage.bgsave();
+    return encodeSimpleString(result);
+  }
+
+  // === AUTH ===
+  private handleAuth(args: string[]): string {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'AUTH' command");
+    return encodeSimpleString('OK');
+  }
+
+  // === HELLO ===
+  private handleHello(args: string[]): string {
+    return encodeArray([
+      'server', 'redbis',
+      'version', '1.0.0',
+      'proto', '2',
+      'id', this.connId,
+      'mode', 'standalone',
+      'role', 'master',
+      'databases', '1',
+    ]);
+  }
+
+  // === RESET ===
+  private handleReset(): string {
+    this.inMulti = false;
+    this.multiQueue = [];
+    this.pubsub.unsubscribeAll(this.connId);
+    return encodeSimpleString('RESET');
+  }
+
+  // === SELECT ===
+  private handleSelect(args: string[]): string {
+    return encodeSimpleString('OK');
+  }
+
+  // === CLIENT ===
+  private handleClient(args: string[]): string {
+    if (args.length < 1) return encodeError("wrong number of arguments for 'CLIENT' command");
+    const sub = args[0].toUpperCase();
+    switch (sub) {
+      case 'SETNAME':
+        if (args.length < 2) return encodeError("wrong number of arguments for 'CLIENT|SETNAME' command");
+        this.clientName = args[1];
+        return encodeSimpleString('OK');
+      case 'GETNAME':
+        return encodeBulkString(this.clientName || null);
+      case 'ID':
+        // Use a hash of connId as numeric ID
+        const numId = parseInt(this.connId);
+        return encodeInteger(isNaN(numId) ? 0 : numId);
+      case 'KILL':
+        return encodeSimpleString('OK');
+      case 'LIST':
+        return encodeBulkString(`id=${this.connId} fd=-1 name=${this.clientName} age=0 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=client`);
+      case 'INFO':
+        return encodeBulkString(`id=${this.connId} fd=-1 name=${this.clientName} age=0 idle=0 flags=N db=0`);
+      case 'PAUSE':
+        return encodeSimpleString('OK');
+      case 'UNPAUSE':
+        return encodeSimpleString('OK');
+      case 'UNBLOCK':
+        return encodeInteger(0);
+      case 'REPLY':
+        return encodeSimpleString('OK');
+      case 'SETINFO':
+        return encodeSimpleString('OK');
+      default:
+        return encodeError(`unknown subcommand '${args[0]}'. Try CLIENT HELP.`);
     }
   }
 }
