@@ -297,26 +297,63 @@ describe('Bitmap 명령어 — InMemoryStorage', () => {
 
     it('OVERFLOW WRAP은 오버플로우 시 래핑한다', async () => {
       await handler.execute(['BITFIELD', 'mykey', 'SET', 'u8', '0', '250']);
-      const result = await handler.execute(['BITFIELD', 'mykey', 'OVERFLOW', 'WRAP', 'INCRBY', 'u8', '0', '10']);
+      const result = await handler.execute([
+        'BITFIELD',
+        'mykey',
+        'OVERFLOW',
+        'WRAP',
+        'INCRBY',
+        'u8',
+        '0',
+        '10',
+      ]);
       // 250 + 10 = 260 -> wrap to 4 (260 % 256)
       expect(result).toContain(':4\r\n');
     });
 
     it('OVERFLOW SAT은 오버플로우 시 포화한다', async () => {
       await handler.execute(['BITFIELD', 'mykey', 'SET', 'u8', '0', '250']);
-      const result = await handler.execute(['BITFIELD', 'mykey', 'OVERFLOW', 'SAT', 'INCRBY', 'u8', '0', '10']);
+      const result = await handler.execute([
+        'BITFIELD',
+        'mykey',
+        'OVERFLOW',
+        'SAT',
+        'INCRBY',
+        'u8',
+        '0',
+        '10',
+      ]);
       // 250 + 10 = 260 -> saturate to 255
       expect(result).toContain(':255\r\n');
     });
 
     it('OVERFLOW FAIL은 오버플로우 시 null을 반환한다', async () => {
       await handler.execute(['BITFIELD', 'mykey', 'SET', 'u8', '0', '250']);
-      const result = await handler.execute(['BITFIELD', 'mykey', 'OVERFLOW', 'FAIL', 'INCRBY', 'u8', '0', '10']);
+      const result = await handler.execute([
+        'BITFIELD',
+        'mykey',
+        'OVERFLOW',
+        'FAIL',
+        'INCRBY',
+        'u8',
+        '0',
+        '10',
+      ]);
       expect(result).toContain('$-1\r\n');
     });
 
     it('여러 연산을 한번에 수행할 수 있다', async () => {
-      const result = await handler.execute(['BITFIELD', 'mykey', 'SET', 'u8', '0', '42', 'GET', 'u8', '0']);
+      const result = await handler.execute([
+        'BITFIELD',
+        'mykey',
+        'SET',
+        'u8',
+        '0',
+        '42',
+        'GET',
+        'u8',
+        '0',
+      ]);
       // SET returns old value (0), GET returns new value (42)
       expect(result).toContain(':0\r\n');
       expect(result).toContain(':42\r\n');

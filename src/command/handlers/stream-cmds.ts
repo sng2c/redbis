@@ -51,29 +51,43 @@ async function handleXadd(ctx: HandlerContext, args: string[]): Promise<string> 
   while (i < args.length) {
     const opt = args[i].toUpperCase();
     if (opt === 'NOMKSTREAM') {
-      nomkstream = true; i++;
+      nomkstream = true;
+      i++;
     } else if (opt === 'MAXLEN') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       approx = false;
-      if (args[i] === '~') { approx = true; i++; if (i >= args.length) return encodeError('ERR syntax error'); }
+      if (args[i] === '~') {
+        approx = true;
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+      }
       maxlen = parseInt(args[i]);
-      if (isNaN(maxlen) || maxlen < 0) return encodeError('ERR value is not an integer or out of range');
+      if (isNaN(maxlen) || maxlen < 0)
+        return encodeError('ERR value is not an integer or out of range');
       i++;
       // Check for LIMIT after MAXLEN
       if (i < args.length && args[i].toUpperCase() === 'LIMIT') {
-        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
         limit = parseInt(args[i]);
         if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
         i++;
       }
     } else if (opt === 'MINID') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       approx = false;
-      if (args[i] === '~') { approx = true; i++; if (i >= args.length) return encodeError('ERR syntax error'); }
+      if (args[i] === '~') {
+        approx = true;
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
+      }
       minid = args[i];
       i++;
       if (i < args.length && args[i].toUpperCase() === 'LIMIT') {
-        i++; if (i >= args.length) return encodeError('ERR syntax error');
+        i++;
+        if (i >= args.length) return encodeError('ERR syntax error');
         limit = parseInt(args[i]);
         if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
         i++;
@@ -98,9 +112,21 @@ async function handleXadd(ctx: HandlerContext, args: string[]): Promise<string> 
     fields[args[j]] = args[j + 1];
   }
 
-  const options: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean; limit?: number } = {};
-  if (maxlen !== undefined) { options.maxlen = maxlen; options.approx = approx; }
-  if (minid !== undefined) { options.minid = minid; options.approx = approx; }
+  const options: {
+    maxlen?: number;
+    approx?: boolean;
+    minid?: string;
+    nomkstream?: boolean;
+    limit?: number;
+  } = {};
+  if (maxlen !== undefined) {
+    options.maxlen = maxlen;
+    options.approx = approx;
+  }
+  if (minid !== undefined) {
+    options.minid = minid;
+    options.approx = approx;
+  }
   if (nomkstream) options.nomkstream = true;
   if (limit !== undefined) options.limit = limit;
 
@@ -127,14 +153,18 @@ async function handleXtrim(ctx: HandlerContext, args: string[]): Promise<string>
   let threshold: string | number;
   let limit: number | undefined;
   let i = 2;
-  if (args[i] === '~') { approx = true; i++; }
+  if (args[i] === '~') {
+    approx = true;
+    i++;
+  }
   threshold = strategy === 'MAXLEN' ? parseInt(args[i]) : args[i];
   if (strategy === 'MAXLEN' && isNaN(threshold as number)) {
     return encodeError('ERR value is not an integer or out of range');
   }
   i++;
   if (i < args.length && args[i].toUpperCase() === 'LIMIT') {
-    i++; if (i >= args.length) return encodeError('ERR syntax error');
+    i++;
+    if (i >= args.length) return encodeError('ERR syntax error');
     limit = parseInt(args[i]);
     if (isNaN(limit)) return encodeError('ERR value is not an integer or out of range');
   }
@@ -162,13 +192,14 @@ async function handleXrange(ctx: HandlerContext, args: string[]): Promise<string
   let count: number | undefined;
   for (let i = 3; i < args.length; i++) {
     if (args[i].toUpperCase() === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
   const result = await ctx.storage.xrange(key, start, end, count);
-  const parts = result.map(e => encodeStreamEntry(e));
+  const parts = result.map((e) => encodeStreamEntry(e));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -182,13 +213,14 @@ async function handleXrevrange(ctx: HandlerContext, args: string[]): Promise<str
   let count: number | undefined;
   for (let i = 3; i < args.length; i++) {
     if (args[i].toUpperCase() === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
   const result = await ctx.storage.xrevrange(key, end, start, count);
-  const parts = result.map(e => encodeStreamEntry(e));
+  const parts = result.map((e) => encodeStreamEntry(e));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -207,12 +239,14 @@ async function handleXread(ctx: HandlerContext, args: string[]): Promise<string>
   while (i < args.length) {
     const opt = args[i].toUpperCase();
     if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
       i++;
     } else if (opt === 'BLOCK') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       block = parseInt(args[i]);
       if (isNaN(block)) return encodeError('ERR value is not an integer or out of range');
       i++;
@@ -236,9 +270,9 @@ async function handleXread(ctx: HandlerContext, args: string[]): Promise<string>
   const result = await ctx.storage.xread(keys, ids, count);
   if (result === null) return encodeArray(null);
   // Format: array of [key, [entries...]]
-  const parts = result.map(stream => {
+  const parts = result.map((stream) => {
     const keyEnc = encodeBulkString(stream.key);
-    const entriesEnc = `*${stream.entries.length}\r\n${stream.entries.map(e => encodeStreamEntry(e)).join('')}`;
+    const entriesEnc = `*${stream.entries.length}\r\n${stream.entries.map((e) => encodeStreamEntry(e)).join('')}`;
     return `*2\r\n${keyEnc}${entriesEnc}`;
   });
   return `*${parts.length}\r\n${parts.join('')}`;
@@ -248,12 +282,18 @@ async function handleXgroup(ctx: HandlerContext, args: string[]): Promise<string
   if (args.length < 1) return encodeError("wrong number of arguments for 'XGROUP' command");
   const sub = args[0].toUpperCase();
   switch (sub) {
-    case 'CREATE': return await handleXgroupCreate(ctx, args.slice(1));
-    case 'DESTROY': return await handleXgroupDestroy(ctx, args.slice(1));
-    case 'CREATECONSUMER': return await handleXgroupCreateconsumer(ctx, args.slice(1));
-    case 'DELCONSUMER': return await handleXgroupDelconsumer(ctx, args.slice(1));
-    case 'SETID': return await handleXgroupSetid(ctx, args.slice(1));
-    default: return encodeError(`unknown subcommand '${args[0]}'`);
+    case 'CREATE':
+      return await handleXgroupCreate(ctx, args.slice(1));
+    case 'DESTROY':
+      return await handleXgroupDestroy(ctx, args.slice(1));
+    case 'CREATECONSUMER':
+      return await handleXgroupCreateconsumer(ctx, args.slice(1));
+    case 'DELCONSUMER':
+      return await handleXgroupDelconsumer(ctx, args.slice(1));
+    case 'SETID':
+      return await handleXgroupSetid(ctx, args.slice(1));
+    default:
+      return encodeError(`unknown subcommand '${args[0]}'`);
   }
 }
 
@@ -264,7 +304,9 @@ async function handleXgroupCreate(ctx: HandlerContext, args: string[]): Promise<
   let id = args[2];
   let mkstream = false;
   for (let i = 3; i < args.length; i++) {
-    if (args[i].toUpperCase() === 'MKSTREAM') { mkstream = true; }
+    if (args[i].toUpperCase() === 'MKSTREAM') {
+      mkstream = true;
+    }
   }
   const result = await ctx.storage.xgroupCreate(key, group, id, mkstream);
   return encodeSimpleString(result);
@@ -279,7 +321,8 @@ async function handleXgroupDestroy(ctx: HandlerContext, args: string[]): Promise
 }
 
 async function handleXgroupCreateconsumer(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 3) return encodeError("wrong number of arguments for 'XGROUP CREATECONSUMER' command");
+  if (args.length < 3)
+    return encodeError("wrong number of arguments for 'XGROUP CREATECONSUMER' command");
   const key = args[0];
   const group = args[1];
   const consumer = args[2];
@@ -288,7 +331,8 @@ async function handleXgroupCreateconsumer(ctx: HandlerContext, args: string[]): 
 }
 
 async function handleXgroupDelconsumer(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 3) return encodeError("wrong number of arguments for 'XGROUP DELCONSUMER' command");
+  if (args.length < 3)
+    return encodeError("wrong number of arguments for 'XGROUP DELCONSUMER' command");
   const key = args[0];
   const group = args[1];
   const consumer = args[2];
@@ -318,19 +362,23 @@ async function handleXreadgroup(ctx: HandlerContext, args: string[]): Promise<st
   while (i < args.length) {
     const opt = args[i].toUpperCase();
     if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
       i++;
     } else if (opt === 'BLOCK') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       block = parseInt(args[i]);
       if (isNaN(block)) return encodeError('ERR value is not an integer or out of range');
       i++;
     } else if (opt === 'NOACK') {
-      noack = true; i++;
+      noack = true;
+      i++;
     } else if (opt === 'STREAMS') {
-      i++; break;
+      i++;
+      break;
     } else {
       return encodeError('ERR syntax error');
     }
@@ -346,9 +394,9 @@ async function handleXreadgroup(ctx: HandlerContext, args: string[]): Promise<st
 
   const result = await ctx.storage.xreadgroup(group, consumer, keys, ids, count, noack);
   if (result === null) return encodeArray(null);
-  const parts = result.map(stream => {
+  const parts = result.map((stream) => {
     const keyEnc = encodeBulkString(stream.key);
-    const entriesEnc = `*${stream.entries.length}\r\n${stream.entries.map(e => encodeStreamEntry(e)).join('')}`;
+    const entriesEnc = `*${stream.entries.length}\r\n${stream.entries.map((e) => encodeStreamEntry(e)).join('')}`;
     return `*2\r\n${keyEnc}${entriesEnc}`;
   });
   return `*${parts.length}\r\n${parts.join('')}`;
@@ -376,14 +424,19 @@ async function handleXpending(ctx: HandlerContext, args: string[]): Promise<stri
     if (Array.isArray(result)) {
       // Detailed form result (shouldn't happen here but handle)
       const entries = result as PendingEntry[];
-      const parts = entries.map(e => {
+      const parts = entries.map((e) => {
         return `*4\r\n${encodeBulkString(e.id)}${encodeBulkString(e.consumer)}${encodeInteger(Math.floor(e.deliveredTime))}${encodeInteger(e.deliveryCount)}`;
       });
       return `*${parts.length}\r\n${parts.join('')}`;
     }
     // Summary: { count, minId, maxId, consumers }
-    const summary = result as { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> };
-    const consumerParts = summary.consumers.map(c => {
+    const summary = result as {
+      count: number;
+      minId: string | null;
+      maxId: string | null;
+      consumers: Array<{ name: string; pending: number }>;
+    };
+    const consumerParts = summary.consumers.map((c) => {
       return `*2\r\n${encodeBulkString(c.name)}${encodeInteger(c.pending)}`;
     });
     return `*${4 + consumerParts.length}\r\n${encodeInteger(summary.count)}${encodeBulkString(summary.minId)}${encodeBulkString(summary.maxId)}${encodeInteger(consumerParts.length)}${consumerParts.join('')}`;
@@ -393,7 +446,8 @@ async function handleXpending(ctx: HandlerContext, args: string[]): Promise<stri
   let i = 2;
   let idle: number | undefined;
   if (args[i].toUpperCase() === 'IDLE') {
-    i++; if (i >= args.length) return encodeError('ERR syntax error');
+    i++;
+    if (i >= args.length) return encodeError('ERR syntax error');
     idle = parseInt(args[i]);
     if (isNaN(idle)) return encodeError('ERR value is not an integer or out of range');
     i++;
@@ -407,7 +461,13 @@ async function handleXpending(ctx: HandlerContext, args: string[]): Promise<stri
   if (i + 3 < args.length) {
     consumer = args[i + 3];
   }
-  const options: { start?: string; end?: string; count?: number; consumer?: string; idle?: number } = {};
+  const options: {
+    start?: string;
+    end?: string;
+    count?: number;
+    consumer?: string;
+    idle?: number;
+  } = {};
   options.start = start;
   options.end = end;
   options.count = count;
@@ -417,14 +477,19 @@ async function handleXpending(ctx: HandlerContext, args: string[]): Promise<stri
   // Detailed form returns PendingEntry[]
   if (Array.isArray(result)) {
     const entries = result as PendingEntry[];
-    const parts = entries.map(e => {
+    const parts = entries.map((e) => {
       return `*4\r\n${encodeBulkString(e.id)}${encodeBulkString(e.consumer)}${encodeInteger(Math.floor(e.deliveredTime))}${encodeInteger(e.deliveryCount)}`;
     });
     return `*${parts.length}\r\n${parts.join('')}`;
   }
   // Summary (shouldn't reach here usually)
-  const summary = result as { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> };
-  const consumerParts = summary.consumers.map(c => {
+  const summary = result as {
+    count: number;
+    minId: string | null;
+    maxId: string | null;
+    consumers: Array<{ name: string; pending: number }>;
+  };
+  const consumerParts = summary.consumers.map((c) => {
     return `*2\r\n${encodeBulkString(c.name)}${encodeInteger(c.pending)}`;
   });
   return `*4\r\n${encodeInteger(summary.count)}${encodeBulkString(summary.minId)}${encodeBulkString(summary.maxId)}${encodeInteger(consumerParts.length)}${consumerParts.join('')}`;
@@ -440,7 +505,14 @@ async function handleXclaim(ctx: HandlerContext, args: string[]): Promise<string
   // Parse IDs until we hit a flag
   const ids: string[] = [];
   let i = 4;
-  while (i < args.length && !args[i].toUpperCase().startsWith('IDLE') && !args[i].toUpperCase().startsWith('TIME') && !args[i].toUpperCase().startsWith('RETRYCOUNT') && args[i].toUpperCase() !== 'FORCE' && args[i].toUpperCase() !== 'JUSTID') {
+  while (
+    i < args.length &&
+    !args[i].toUpperCase().startsWith('IDLE') &&
+    !args[i].toUpperCase().startsWith('TIME') &&
+    !args[i].toUpperCase().startsWith('RETRYCOUNT') &&
+    args[i].toUpperCase() !== 'FORCE' &&
+    args[i].toUpperCase() !== 'JUSTID'
+  ) {
     ids.push(args[i]);
     i++;
   }
@@ -453,30 +525,42 @@ async function handleXclaim(ctx: HandlerContext, args: string[]): Promise<string
   while (i < args.length) {
     const opt = args[i].toUpperCase();
     if (opt === 'IDLE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       idle = parseInt(args[i]);
       if (isNaN(idle)) return encodeError('ERR value is not an integer or out of range');
       i++;
     } else if (opt === 'TIME') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       time = parseInt(args[i]);
       if (isNaN(time)) return encodeError('ERR value is not an integer or out of range');
       i++;
     } else if (opt === 'RETRYCOUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       retrycount = parseInt(args[i]);
       if (isNaN(retrycount)) return encodeError('ERR value is not an integer or out of range');
       i++;
     } else if (opt === 'FORCE') {
-      force = true; i++;
+      force = true;
+      i++;
     } else if (opt === 'JUSTID') {
-      justid = true; i++;
+      justid = true;
+      i++;
     } else {
       // Treat as ID
-      ids.push(args[i]); i++;
+      ids.push(args[i]);
+      i++;
     }
   }
-  const options: { idle?: number; time?: number; retrycount?: number; force?: boolean; justid?: boolean } = {};
+  const options: {
+    idle?: number;
+    time?: number;
+    retrycount?: number;
+    force?: boolean;
+    justid?: boolean;
+  } = {};
   if (idle !== undefined) options.idle = idle;
   if (time !== undefined) options.time = time;
   if (retrycount !== undefined) options.retrycount = retrycount;
@@ -491,7 +575,7 @@ async function handleXclaim(ctx: HandlerContext, args: string[]): Promise<string
   }
   // Result is StreamEntry[]
   const entries = result as StreamEntry[];
-  const parts = entries.map(e => encodeStreamEntry(e));
+  const parts = entries.map((e) => encodeStreamEntry(e));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -508,7 +592,8 @@ async function handleXautoclaim(ctx: HandlerContext, args: string[]): Promise<st
   for (let i = 5; i < args.length; i++) {
     const opt = args[i].toUpperCase();
     if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     } else if (opt === 'JUSTID') {
@@ -527,7 +612,7 @@ async function handleXautoclaim(ctx: HandlerContext, args: string[]): Promise<st
   }
   // Result.entries is StreamEntry[]
   const entries = result.entries as StreamEntry[];
-  const parts = entries.map(e => encodeStreamEntry(e));
+  const parts = entries.map((e) => encodeStreamEntry(e));
   return `*2\r\n${encodeBulkString(result.nextStartId)}*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -535,10 +620,14 @@ async function handleXinfo(ctx: HandlerContext, args: string[]): Promise<string>
   if (args.length < 1) return encodeError("wrong number of arguments for 'XINFO' command");
   const sub = args[0].toUpperCase();
   switch (sub) {
-    case 'STREAM': return await handleXinfoStream(ctx, args.slice(1));
-    case 'GROUPS': return await handleXinfoGroups(ctx, args.slice(1));
-    case 'CONSUMERS': return await handleXinfoConsumers(ctx, args.slice(1));
-    default: return encodeError(`unknown subcommand '${args[0]}'`);
+    case 'STREAM':
+      return await handleXinfoStream(ctx, args.slice(1));
+    case 'GROUPS':
+      return await handleXinfoGroups(ctx, args.slice(1));
+    case 'CONSUMERS':
+      return await handleXinfoConsumers(ctx, args.slice(1));
+    default:
+      return encodeError(`unknown subcommand '${args[0]}'`);
   }
 }
 
@@ -548,13 +637,20 @@ async function handleXinfoStream(ctx: HandlerContext, args: string[]): Promise<s
   const result = await ctx.storage.xinfoStream(key);
   // Return as flat array of field-value pairs
   const items: string[] = [
-    'length', String(result.length),
-    'first-entry', result.firstEntry ? encodeStreamEntry(result.firstEntry) : encodeBulkString(null),
-    'last-entry', result.lastEntry ? encodeStreamEntry(result.lastEntry) : encodeBulkString(null),
-    'max-deleted-entry-id', String(result.maxDeletedEntryId),
-    'entries-added', String(result.entriesAdded),
-    'recorded-first-entry-id', String(result.recordedFirstEntryId),
-    'groups', String(result.groups),
+    'length',
+    String(result.length),
+    'first-entry',
+    result.firstEntry ? encodeStreamEntry(result.firstEntry) : encodeBulkString(null),
+    'last-entry',
+    result.lastEntry ? encodeStreamEntry(result.lastEntry) : encodeBulkString(null),
+    'max-deleted-entry-id',
+    String(result.maxDeletedEntryId),
+    'entries-added',
+    String(result.entriesAdded),
+    'recorded-first-entry-id',
+    String(result.recordedFirstEntryId),
+    'groups',
+    String(result.groups),
   ];
   return encodeArray(items);
 }
@@ -563,14 +659,20 @@ async function handleXinfoGroups(ctx: HandlerContext, args: string[]): Promise<s
   if (args.length < 1) return encodeError("wrong number of arguments for 'XINFO GROUPS' command");
   const key = args[0];
   const result = await ctx.storage.xinfoGroups(key);
-  const parts = result.map(g => {
+  const parts = result.map((g) => {
     const items = [
-      'name', g.name,
-      'consumers', String(g.consumers),
-      'pending', String(g.pending),
-      'last-delivered-id', g.lastDeliveredId,
-      'entries-read', String(g.entriesRead),
-      'lag', String(g.lag),
+      'name',
+      g.name,
+      'consumers',
+      String(g.consumers),
+      'pending',
+      String(g.pending),
+      'last-delivered-id',
+      g.lastDeliveredId,
+      'entries-read',
+      String(g.entriesRead),
+      'lag',
+      String(g.lag),
     ];
     return encodeArray(items);
   });
@@ -578,16 +680,13 @@ async function handleXinfoGroups(ctx: HandlerContext, args: string[]): Promise<s
 }
 
 async function handleXinfoConsumers(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 2) return encodeError("wrong number of arguments for 'XINFO CONSUMERS' command");
+  if (args.length < 2)
+    return encodeError("wrong number of arguments for 'XINFO CONSUMERS' command");
   const key = args[0];
   const group = args[1];
   const result = await ctx.storage.xinfoConsumers(key, group);
-  const parts = result.map(c => {
-    const items = [
-      'name', c.name,
-      'pending', String(c.pendingCount),
-      'idle', String(c.idleTime),
-    ];
+  const parts = result.map((c) => {
+    const items = ['name', c.name, 'pending', String(c.pendingCount), 'idle', String(c.idleTime)];
     return encodeArray(items);
   });
   return `*${parts.length}\r\n${parts.join('')}`;

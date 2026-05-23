@@ -15,11 +15,11 @@ export class InMemoryStorage {
   streamStore: Map<string, StreamData> = new Map();
   startTime = Date.now();
 
-isExpired(entry: StoreEntry): boolean {
+  isExpired(entry: StoreEntry): boolean {
     return entry.expiresAt !== null && Date.now() >= entry.expiresAt;
   }
 
-evictIfExpired(key: string): void {
+  evictIfExpired(key: string): void {
     const entry = this.store.get(key);
     if (entry && this.isExpired(entry)) {
       this.store.delete(key);
@@ -32,7 +32,7 @@ evictIfExpired(key: string): void {
     }
   }
 
-evictAllExpired(): void {
+  evictAllExpired(): void {
     const keysToDelete: string[] = [];
     for (const [key, entry] of this.store) {
       if (this.isExpired(entry)) {
@@ -50,19 +50,18 @@ evictAllExpired(): void {
     }
   }
 
-
-async get(key: string): Promise<string | null> {
+  async get(key: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     return entry?.value ?? null;
   }
 
-async set(key: string, value: string): Promise<void> {
+  async set(key: string, value: string): Promise<void> {
     this.evictIfExpired(key);
     this.store.set(key, { value, type: 'string', expiresAt: null });
   }
 
-async delete(key: string): Promise<boolean> {
+  async delete(key: string): Promise<boolean> {
     this.evictIfExpired(key);
     const result = this.store.delete(key);
     this.hashStore.delete(key);
@@ -74,7 +73,7 @@ async delete(key: string): Promise<boolean> {
     return result;
   }
 
-async keys(pattern: string): Promise<string[]> {
+  async keys(pattern: string): Promise<string[]> {
     this.evictAllExpired();
     const regex = globToRegex(pattern);
     const result: string[] = [];
@@ -86,7 +85,7 @@ async keys(pattern: string): Promise<string[]> {
     return result.sort();
   }
 
-async flush(): Promise<void> {
+  async flush(): Promise<void> {
     this.store.clear();
     this.hashStore.clear();
     this.listStore.clear();
@@ -96,7 +95,7 @@ async flush(): Promise<void> {
     this.streamStore.clear();
   }
 
-async mget(keys: string[]): Promise<(string | null)[]> {
+  async mget(keys: string[]): Promise<(string | null)[]> {
     const result: (string | null)[] = [];
     for (const key of keys) {
       this.evictIfExpired(key);
@@ -106,7 +105,7 @@ async mget(keys: string[]): Promise<(string | null)[]> {
     return result;
   }
 
-async mset(pairs: Array<{ key: string; value: string }>): Promise<void> {
+  async mset(pairs: Array<{ key: string; value: string }>): Promise<void> {
     for (const { key } of pairs) {
       this.evictIfExpired(key);
     }
@@ -115,7 +114,7 @@ async mset(pairs: Array<{ key: string; value: string }>): Promise<void> {
     }
   }
 
-async msetnx(pairs: Array<{ key: string; value: string }>): Promise<boolean> {
+  async msetnx(pairs: Array<{ key: string; value: string }>): Promise<boolean> {
     // Evict all relevant keys first
     for (const { key } of pairs) {
       this.evictIfExpired(key);
@@ -133,7 +132,7 @@ async msetnx(pairs: Array<{ key: string; value: string }>): Promise<boolean> {
     return true;
   }
 
-async append(key: string, value: string): Promise<number> {
+  async append(key: string, value: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) {
@@ -144,13 +143,13 @@ async append(key: string, value: string): Promise<number> {
     return entry.value.length;
   }
 
-async strlen(key: string): Promise<number> {
+  async strlen(key: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     return entry?.value.length ?? 0;
   }
 
-async getrange(key: string, start: number, end: number): Promise<string> {
+  async getrange(key: string, start: number, end: number): Promise<string> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return '';
@@ -162,7 +161,7 @@ async getrange(key: string, start: number, end: number): Promise<string> {
     return str.substring(start, end + 1);
   }
 
-async setrange(key: string, offset: number, value: string): Promise<number> {
+  async setrange(key: string, offset: number, value: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     let current: string;
@@ -189,7 +188,7 @@ async setrange(key: string, offset: number, value: string): Promise<number> {
     return newValue.length;
   }
 
-async incrby(key: string, delta: number): Promise<number> {
+  async incrby(key: string, delta: number): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     let current: number;
@@ -203,11 +202,15 @@ async incrby(key: string, delta: number): Promise<number> {
       current = parsed;
     }
     const result = current + delta;
-    this.store.set(key, { value: String(result), type: 'string', expiresAt: entry?.expiresAt ?? null });
+    this.store.set(key, {
+      value: String(result),
+      type: 'string',
+      expiresAt: entry?.expiresAt ?? null,
+    });
     return result;
   }
 
-async incrbyfloat(key: string, delta: number): Promise<string> {
+  async incrbyfloat(key: string, delta: number): Promise<string> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     let current: number;
@@ -238,7 +241,7 @@ async incrbyfloat(key: string, delta: number): Promise<string> {
     return resultStr;
   }
 
-async setnx(key: string, value: string): Promise<boolean> {
+  async setnx(key: string, value: string): Promise<boolean> {
     this.evictIfExpired(key);
     if (this.store.has(key)) {
       return false;
@@ -247,23 +250,23 @@ async setnx(key: string, value: string): Promise<boolean> {
     return true;
   }
 
-async setex(key: string, seconds: number, value: string): Promise<void> {
+  async setex(key: string, seconds: number, value: string): Promise<void> {
     if (seconds <= 0) {
-      throw new Error('ERR invalid expire time in \'SETEX\' command');
+      throw new Error("ERR invalid expire time in 'SETEX' command");
     }
     this.evictIfExpired(key);
     this.store.set(key, { value, type: 'string', expiresAt: Date.now() + seconds * 1000 });
   }
 
-async psetex(key: string, milliseconds: number, value: string): Promise<void> {
+  async psetex(key: string, milliseconds: number, value: string): Promise<void> {
     if (milliseconds <= 0) {
-      throw new Error('ERR invalid expire time in \'PSETEX\' command');
+      throw new Error("ERR invalid expire time in 'PSETEX' command");
     }
     this.evictIfExpired(key);
     this.store.set(key, { value, type: 'string', expiresAt: Date.now() + milliseconds });
   }
 
-async getset(key: string, value: string): Promise<string | null> {
+  async getset(key: string, value: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     const oldValue = entry?.value ?? null;
@@ -271,7 +274,7 @@ async getset(key: string, value: string): Promise<string | null> {
     return oldValue;
   }
 
-async getdel(key: string): Promise<string | null> {
+  async getdel(key: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -280,7 +283,10 @@ async getdel(key: string): Promise<string | null> {
     return value;
   }
 
-async getex(key: string, options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }): Promise<string | null> {
+  async getex(
+    key: string,
+    options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }
+  ): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -303,7 +309,7 @@ async getex(key: string, options?: { ex?: number; px?: number; exat?: number; px
     return value;
   }
 
-async rename(oldKey: string, newKey: string): Promise<void> {
+  async rename(oldKey: string, newKey: string): Promise<void> {
     this.evictIfExpired(oldKey);
     this.evictIfExpired(newKey);
     const entry = this.store.get(oldKey);
@@ -338,7 +344,7 @@ async rename(oldKey: string, newKey: string): Promise<void> {
     }
   }
 
-async renamenx(oldKey: string, newKey: string): Promise<boolean> {
+  async renamenx(oldKey: string, newKey: string): Promise<boolean> {
     this.evictIfExpired(oldKey);
     this.evictIfExpired(newKey);
 
@@ -361,18 +367,18 @@ async renamenx(oldKey: string, newKey: string): Promise<boolean> {
     return true;
   }
 
-async type(key: string): Promise<string> {
+  async type(key: string): Promise<string> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     return entry?.type ?? 'none';
   }
 
-async dbsize(): Promise<number> {
+  async dbsize(): Promise<number> {
     this.evictAllExpired();
     return this.store.size;
   }
 
-async copy(source: string, destination: string): Promise<boolean> {
+  async copy(source: string, destination: string): Promise<boolean> {
     this.evictIfExpired(source);
     this.evictIfExpired(destination);
     const entry = this.store.get(source);
@@ -422,11 +428,11 @@ async copy(source: string, destination: string): Promise<boolean> {
           newGroups.set(gName, {
             ...group,
             consumers: newConsumers,
-            pending: group.pending.map(p => ({ ...p })),
+            pending: group.pending.map((p) => ({ ...p })),
           });
         }
         this.streamStore.set(destination, {
-          entries: streamData.entries.map(e => ({ ...e, fields: { ...e.fields } })),
+          entries: streamData.entries.map((e) => ({ ...e, fields: { ...e.fields } })),
           groups: newGroups,
           lastId: streamData.lastId,
           maxDeletedId: streamData.maxDeletedId,
@@ -438,14 +444,14 @@ async copy(source: string, destination: string): Promise<boolean> {
     return true;
   }
 
-async randomkey(): Promise<string | null> {
+  async randomkey(): Promise<string | null> {
     this.evictAllExpired();
     if (this.store.size === 0) return null;
     const keys = Array.from(this.store.keys());
     return keys[Math.floor(Math.random() * keys.length)];
   }
 
-async unlink(keys: string[]): Promise<number> {
+  async unlink(keys: string[]): Promise<number> {
     let count = 0;
     for (const key of keys) {
       this.evictIfExpired(key);
@@ -462,7 +468,7 @@ async unlink(keys: string[]): Promise<number> {
     return count;
   }
 
-async touch(keys: string[]): Promise<number> {
+  async touch(keys: string[]): Promise<number> {
     let count = 0;
     for (const key of keys) {
       this.evictIfExpired(key);
@@ -473,7 +479,7 @@ async touch(keys: string[]): Promise<number> {
     return count;
   }
 
-async expire(key: string, seconds: number): Promise<boolean> {
+  async expire(key: string, seconds: number): Promise<boolean> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return false;
@@ -481,7 +487,7 @@ async expire(key: string, seconds: number): Promise<boolean> {
     return true;
   }
 
-async expireat(key: string, timestamp: number): Promise<boolean> {
+  async expireat(key: string, timestamp: number): Promise<boolean> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return false;
@@ -489,7 +495,7 @@ async expireat(key: string, timestamp: number): Promise<boolean> {
     return true;
   }
 
-async pexpire(key: string, milliseconds: number): Promise<boolean> {
+  async pexpire(key: string, milliseconds: number): Promise<boolean> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return false;
@@ -497,7 +503,7 @@ async pexpire(key: string, milliseconds: number): Promise<boolean> {
     return true;
   }
 
-async pexpireat(key: string, millisecondsTimestamp: number): Promise<boolean> {
+  async pexpireat(key: string, millisecondsTimestamp: number): Promise<boolean> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return false;
@@ -505,7 +511,7 @@ async pexpireat(key: string, millisecondsTimestamp: number): Promise<boolean> {
     return true;
   }
 
-async ttl(key: string): Promise<number> {
+  async ttl(key: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return -2;
@@ -519,7 +525,7 @@ async ttl(key: string): Promise<number> {
     return remaining;
   }
 
-async pttl(key: string): Promise<number> {
+  async pttl(key: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return -2;
@@ -532,7 +538,7 @@ async pttl(key: string): Promise<number> {
     return remaining;
   }
 
-async persist(key: string): Promise<boolean> {
+  async persist(key: string): Promise<boolean> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return false;
@@ -541,7 +547,7 @@ async persist(key: string): Promise<boolean> {
     return true;
   }
 
-async expiretime(key: string): Promise<number> {
+  async expiretime(key: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return -2;
@@ -549,7 +555,7 @@ async expiretime(key: string): Promise<number> {
     return Math.floor(entry.expiresAt / 1000);
   }
 
-async pexpiretime(key: string): Promise<number> {
+  async pexpiretime(key: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return -2;
@@ -557,7 +563,11 @@ async pexpiretime(key: string): Promise<number> {
     return entry.expiresAt;
   }
 
-async scan(cursor: number, pattern?: string, count?: number): Promise<{ cursor: number; keys: string[] }> {
+  async scan(
+    cursor: number,
+    pattern?: string,
+    count?: number
+  ): Promise<{ cursor: number; keys: string[] }> {
     this.evictAllExpired();
 
     const allKeys = Array.from(this.store.keys()).sort();
@@ -580,5 +590,4 @@ async scan(cursor: number, pattern?: string, count?: number): Promise<{ cursor: 
 
     return { cursor: nextCursor, keys: matchedKeys };
   }
-
 }

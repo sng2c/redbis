@@ -437,8 +437,8 @@ describe('세트(Set) 명령어 — InMemoryStorage', () => {
     it('존재하지 않는 키 스캔 — cursor 0, 빈 배열 반환', async () => {
       const result = await handler.execute(['SSCAN', 'noset', '0']);
       expect(result).toMatch(/^\*2\r\n/);
-      expect(result).toContain('$1\r\n0\r\n');  // cursor = "0"
-      expect(result).toContain('*0\r\n');     // empty members
+      expect(result).toContain('$1\r\n0\r\n'); // cursor = "0"
+      expect(result).toContain('*0\r\n'); // empty members
     });
 
     it('SSCAN 인자가 부족하면 에러를 반환한다', async () => {

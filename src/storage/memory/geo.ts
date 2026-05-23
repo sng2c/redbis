@@ -1,25 +1,40 @@
 // @ts-nocheck
 import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
-import { encodeGeohash, decodeGeohash, geohashToString, calculateDistance, getBoundingBox, isInRadius } from '../../utils/geo';
+import {
+  encodeGeohash,
+  decodeGeohash,
+  geohashToString,
+  calculateDistance,
+  getBoundingBox,
+  isInRadius,
+} from '../../utils/geo';
 import type { GeoSearchResult } from '../../utils/geo';
 
 export const geoMethods = {
-_ensureGeoTypeOrThrow(key: string): void {
+  _ensureGeoTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'zset');
   },
 
-_unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {
+  _unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {
     switch (unit) {
-      case 'km': return 1000;
-      case 'ft': return 0.3048;
-      case 'mi': return 1609.34;
+      case 'km':
+        return 1000;
+      case 'ft':
+        return 0.3048;
+      case 'mi':
+        return 1609.34;
       case 'm':
-      default: return 1;
+      default:
+        return 1;
     }
   },
 
-async geoadd(key: string, members: Array<{ longitude: number; latitude: number; member: string }>, options?: { nx?: boolean; xx?: boolean; ch?: boolean }): Promise<number> {
+  async geoadd(
+    key: string,
+    members: Array<{ longitude: number; latitude: number; member: string }>,
+    options?: { nx?: boolean; xx?: boolean; ch?: boolean }
+  ): Promise<number> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
@@ -83,26 +98,26 @@ async geoadd(key: string, members: Array<{ longitude: number; latitude: number; 
     return options?.ch ? added + changed : added;
   },
 
-async geohash(key: string, members: string[]): Promise<(string | null)[]> {
+  async geohash(key: string, members: string[]): Promise<(string | null)[]> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
     if (!zset) {
       return members.map(() => null);
     }
-    return members.map(member => {
+    return members.map((member) => {
       const score = zset.get(member);
       if (score === undefined) return null;
       return geohashToString(score);
     });
   },
 
-async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> {
+  async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
     const geoData = this.geoStore.get(key);
     const zset = this.zsetStore.get(key);
-    return members.map(member => {
+    return members.map((member) => {
       // Try geoStore first
       if (geoData && geoData.has(member)) {
         const { longitude, latitude } = geoData.get(member)!;
@@ -118,7 +133,12 @@ async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> 
     });
   },
 
-async geodist(key: string, member1: string, member2: string, unit: 'm' | 'km' | 'ft' | 'mi' = 'm'): Promise<number | null> {
+  async geodist(
+    key: string,
+    member1: string,
+    member2: string,
+    unit: 'm' | 'km' | 'ft' | 'mi' = 'm'
+  ): Promise<number | null> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
     const geoData = this.geoStore.get(key);
@@ -139,10 +159,31 @@ async geodist(key: string, member1: string, member2: string, unit: 'm' | 'km' | 
     const coord2 = getCoords(member2);
     if (!coord1 || !coord2) return null;
 
-    return calculateDistance(coord1.longitude, coord1.latitude, coord2.longitude, coord2.latitude, unit);
+    return calculateDistance(
+      coord1.longitude,
+      coord1.latitude,
+      coord2.longitude,
+      coord2.latitude,
+      unit
+    );
   },
 
-async georadius(key: string, longitude: number, latitude: number, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]> {
+  async georadius(
+    key: string,
+    longitude: number,
+    latitude: number,
+    radius: number,
+    unit: 'm' | 'km' | 'ft' | 'mi',
+    options?: {
+      withCoord?: boolean;
+      withDist?: boolean;
+      withHash?: boolean;
+      count?: number;
+      sort?: 'ASC' | 'DESC';
+      store?: string;
+      storeDist?: string;
+    }
+  ): Promise<GeoSearchResult[]> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -171,15 +212,27 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
       if (!coords) continue;
 
       // Bounding box pre-filter
-      if (coords.longitude < bbox.minLon || coords.longitude > bbox.maxLon ||
-          coords.latitude < bbox.minLat || coords.latitude > bbox.maxLat) continue;
+      if (
+        coords.longitude < bbox.minLon ||
+        coords.longitude > bbox.maxLon ||
+        coords.latitude < bbox.minLat ||
+        coords.latitude > bbox.maxLat
+      )
+        continue;
 
       // Accurate radius check
-      if (!isInRadius(longitude, latitude, radiusMeters, coords.longitude, coords.latitude)) continue;
+      if (!isInRadius(longitude, latitude, radiusMeters, coords.longitude, coords.latitude))
+        continue;
 
       const result: GeoSearchResult = { member, score };
       if (options?.withDist) {
-        result.distance = calculateDistance(longitude, latitude, coords.longitude, coords.latitude, unit);
+        result.distance = calculateDistance(
+          longitude,
+          latitude,
+          coords.longitude,
+          coords.latitude,
+          unit
+        );
       }
       if (options?.withCoord) {
         result.longitude = coords.longitude;
@@ -193,10 +246,20 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
 
     // Sort by distance from center
     results.sort((a, b) => {
-      const distA = calculateDistance(longitude, latitude,
-        getCoords(a.member)!.longitude, getCoords(a.member)!.latitude, 'm');
-      const distB = calculateDistance(longitude, latitude,
-        getCoords(b.member)!.longitude, getCoords(b.member)!.latitude, 'm');
+      const distA = calculateDistance(
+        longitude,
+        latitude,
+        getCoords(a.member)!.longitude,
+        getCoords(a.member)!.latitude,
+        'm'
+      );
+      const distB = calculateDistance(
+        longitude,
+        latitude,
+        getCoords(b.member)!.longitude,
+        getCoords(b.member)!.latitude,
+        'm'
+      );
       return sort === 'ASC' ? distA - distB : distB - distA;
     });
 
@@ -242,8 +305,15 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
       const destZset = this.zsetStore.get(options.storeDist)!;
       destZset.clear();
       for (const r of results) {
-        const dist = r.distance ?? calculateDistance(longitude, latitude,
-          getCoords(r.member)!.longitude, getCoords(r.member)!.latitude, unit);
+        const dist =
+          r.distance ??
+          calculateDistance(
+            longitude,
+            latitude,
+            getCoords(r.member)!.longitude,
+            getCoords(r.member)!.latitude,
+            unit
+          );
         destZset.set(r.member, dist);
       }
       return results;
@@ -252,7 +322,21 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
     return results;
   },
 
-async georadiusbymember(key: string, member: string, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]> {
+  async georadiusbymember(
+    key: string,
+    member: string,
+    radius: number,
+    unit: 'm' | 'km' | 'ft' | 'mi',
+    options?: {
+      withCoord?: boolean;
+      withDist?: boolean;
+      withHash?: boolean;
+      count?: number;
+      sort?: 'ASC' | 'DESC';
+      store?: string;
+      storeDist?: string;
+    }
+  ): Promise<GeoSearchResult[]> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
     const geoData = this.geoStore.get(key);
@@ -275,7 +359,22 @@ async georadiusbymember(key: string, member: string, radius: number, unit: 'm' |
     return this.georadius(key, coords.longitude, coords.latitude, radius, unit, options);
   },
 
-async geosearch(key: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean }): Promise<GeoSearchResult[]> {
+  async geosearch(
+    key: string,
+    options: {
+      fromMember?: string;
+      fromLongitude?: number;
+      fromLatitude?: number;
+      byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      sort?: 'ASC' | 'DESC';
+      count?: number;
+      any?: boolean;
+      withCoord?: boolean;
+      withDist?: boolean;
+      withHash?: boolean;
+    }
+  ): Promise<GeoSearchResult[]> {
     this.evictIfExpired(key);
     this._ensureGeoTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -287,7 +386,9 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
     let centerLat: number;
 
     if (options.fromMember) {
-      const memberCoords = geoData?.get(options.fromMember) ?? (zset.has(options.fromMember) ? decodeGeohash(zset.get(options.fromMember)!) : null);
+      const memberCoords =
+        geoData?.get(options.fromMember) ??
+        (zset.has(options.fromMember) ? decodeGeohash(zset.get(options.fromMember)!) : null);
       if (!memberCoords) return [];
       centerLon = memberCoords.longitude;
       centerLat = memberCoords.latitude;
@@ -315,14 +416,25 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
       for (const [member, score] of zset) {
         const coords = getCoords(member);
         if (!coords) continue;
-        if (coords.longitude < bbox.minLon || coords.longitude > bbox.maxLon ||
-            coords.latitude < bbox.minLat || coords.latitude > bbox.maxLat) continue;
-        if (!isInRadius(centerLon, centerLat, radiusMeters, coords.longitude, coords.latitude)) continue;
+        if (
+          coords.longitude < bbox.minLon ||
+          coords.longitude > bbox.maxLon ||
+          coords.latitude < bbox.minLat ||
+          coords.latitude > bbox.maxLat
+        )
+          continue;
+        if (!isInRadius(centerLon, centerLat, radiusMeters, coords.longitude, coords.latitude))
+          continue;
 
         const result: GeoSearchResult = { member, score };
         if (options.withDist) {
-          result.distance = calculateDistance(centerLon, centerLat, coords.longitude, coords.latitude,
-            options.byRadius!.unit);
+          result.distance = calculateDistance(
+            centerLon,
+            centerLat,
+            coords.longitude,
+            coords.latitude,
+            options.byRadius!.unit
+          );
         }
         if (options.withCoord) {
           result.longitude = coords.longitude;
@@ -341,24 +453,34 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
 
       // Compute bounding box
       const latDegPerM = 1 / 110540;
-      const lonDegPerM = 1 / (111320 * Math.cos(centerLat * Math.PI / 180));
+      const lonDegPerM = 1 / (111320 * Math.cos((centerLat * Math.PI) / 180));
       const bbox = {
         minLon: centerLon - halfWidthM * lonDegPerM,
         maxLon: centerLon + halfWidthM * lonDegPerM,
         minLat: centerLat - halfHeightM * latDegPerM,
-        maxLat: centerLat + halfHeightM * latDegPerM
+        maxLat: centerLat + halfHeightM * latDegPerM,
       };
 
       for (const [member, score] of zset) {
         const coords = getCoords(member);
         if (!coords) continue;
-        if (coords.longitude < bbox.minLon || coords.longitude > bbox.maxLon ||
-            coords.latitude < bbox.minLat || coords.latitude > bbox.maxLat) continue;
+        if (
+          coords.longitude < bbox.minLon ||
+          coords.longitude > bbox.maxLon ||
+          coords.latitude < bbox.minLat ||
+          coords.latitude > bbox.maxLat
+        )
+          continue;
 
         const result: GeoSearchResult = { member, score };
         if (options.withDist) {
-          result.distance = calculateDistance(centerLon, centerLat, coords.longitude, coords.latitude,
-            options.byBox!.unit);
+          result.distance = calculateDistance(
+            centerLon,
+            centerLat,
+            coords.longitude,
+            coords.latitude,
+            options.byBox!.unit
+          );
         }
         if (options.withCoord) {
           result.longitude = coords.longitude;
@@ -376,10 +498,20 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
     // Sort
     const sort = options.sort ?? 'ASC';
     results.sort((a, b) => {
-      const distA = calculateDistance(centerLon, centerLat,
-        getCoords(a.member)!.longitude, getCoords(a.member)!.latitude, 'm');
-      const distB = calculateDistance(centerLon, centerLat,
-        getCoords(b.member)!.longitude, getCoords(b.member)!.latitude, 'm');
+      const distA = calculateDistance(
+        centerLon,
+        centerLat,
+        getCoords(a.member)!.longitude,
+        getCoords(a.member)!.latitude,
+        'm'
+      );
+      const distB = calculateDistance(
+        centerLon,
+        centerLat,
+        getCoords(b.member)!.longitude,
+        getCoords(b.member)!.latitude,
+        'm'
+      );
       return sort === 'ASC' ? distA - distB : distB - distA;
     });
 
@@ -391,7 +523,21 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
     return results;
   },
 
-async geosearchstore(destination: string, source: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean }): Promise<number> {
+  async geosearchstore(
+    destination: string,
+    source: string,
+    options: {
+      fromMember?: string;
+      fromLongitude?: number;
+      fromLatitude?: number;
+      byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      sort?: 'ASC' | 'DESC';
+      count?: number;
+      any?: boolean;
+      storeDist?: boolean;
+    }
+  ): Promise<number> {
     this.evictIfExpired(destination);
     this.evictIfExpired(source);
 
@@ -422,7 +568,9 @@ async geosearchstore(destination: string, source: string, options: { fromMember?
     // Create/update destination zset
     this._ensureZsetKeyExists(destination);
     const destZset = this.zsetStore.get(destination)!;
-    const destGeo = this.geoStore.has(destination) ? this.geoStore.get(destination)! : new Map<string, { longitude: number; latitude: number }>();
+    const destGeo = this.geoStore.has(destination)
+      ? this.geoStore.get(destination)!
+      : new Map<string, { longitude: number; latitude: number }>();
     if (!this.geoStore.has(destination)) {
       this.geoStore.set(destination, destGeo);
     }
@@ -450,9 +598,10 @@ async geosearchstore(destination: string, source: string, options: { fromMember?
       } else {
         destZset.set(r.member, r.score);
       }
-      const coords = r.longitude !== undefined && r.latitude !== undefined
-        ? { longitude: r.longitude, latitude: r.latitude }
-        : getSourceCoords(r.member);
+      const coords =
+        r.longitude !== undefined && r.latitude !== undefined
+          ? { longitude: r.longitude, latitude: r.latitude }
+          : getSourceCoords(r.member);
       if (coords) {
         destGeo.set(r.member, coords);
       }
@@ -460,5 +609,4 @@ async geosearchstore(destination: string, source: string, options: { fromMember?
 
     return searchResults.length;
   },
-
 };

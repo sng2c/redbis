@@ -15,7 +15,12 @@ export class CommandHandler {
   private ctx: HandlerContext;
   private registry: Map<string, CommandFn>;
 
-  constructor(storage: IStorage, pubsub: PubSubManager, connId: string, send: (msg: string) => void) {
+  constructor(
+    storage: IStorage,
+    pubsub: PubSubManager,
+    connId: string,
+    send: (msg: string) => void
+  ) {
     this.registry = createCommandRegistry();
     this.ctx = {
       storage,
@@ -47,7 +52,13 @@ export class CommandHandler {
       if (command === 'MULTI') {
         return encodeError('MULTI calls can not be nested');
       }
-      if (command === 'EXEC' || command === 'DISCARD' || command === 'RESET' || command === 'AUTH' || command === 'HELLO') {
+      if (
+        command === 'EXEC' ||
+        command === 'DISCARD' ||
+        command === 'RESET' ||
+        command === 'AUTH' ||
+        command === 'HELLO'
+      ) {
         // These control the transaction or connection - fall through to dispatch
       } else {
         this.ctx.multiQueue.push(args);

@@ -38,10 +38,7 @@ export class PubSubManager {
       this.channelToConns.get(channel)!.set(connId, sendFn);
       const total = this.totalSubCount(connId);
       results.push(
-        '*3\r\n' +
-        '$9\r\nsubscribe\r\n' +
-        encodeBulkString(channel) +
-        encodeInteger(total)
+        '*3\r\n' + '$9\r\nsubscribe\r\n' + encodeBulkString(channel) + encodeInteger(total)
       );
     }
     return results;
@@ -55,18 +52,13 @@ export class PubSubManager {
       if (channels.length === 0) {
         // No channel subs, return single confirmation with null channel
         results.push(
-          '*3\r\n' +
-          '$11\r\nunsubscribe\r\n' +
-          encodeBulkString(null) +
-          encodeInteger(0)
+          '*3\r\n' + '$11\r\nunsubscribe\r\n' + encodeBulkString(null) + encodeInteger(0)
         );
         return results;
       }
     }
 
-    const toUnsub = channels.length === 0
-      ? (subs ? Array.from(subs) : [])
-      : channels;
+    const toUnsub = channels.length === 0 ? (subs ? Array.from(subs) : []) : channels;
 
     for (const channel of toUnsub) {
       if (subs && subs.has(channel)) {
@@ -81,10 +73,7 @@ export class PubSubManager {
       }
       const total = this.totalSubCount(connId);
       results.push(
-        '*3\r\n' +
-        '$11\r\nunsubscribe\r\n' +
-        encodeBulkString(channel) +
-        encodeInteger(total)
+        '*3\r\n' + '$11\r\nunsubscribe\r\n' + encodeBulkString(channel) + encodeInteger(total)
       );
     }
 
@@ -95,12 +84,7 @@ export class PubSubManager {
 
     // If channels was empty and we had nothing to unsub, return one confirmation with null
     if (channels.length === 0 && results.length === 0) {
-      results.push(
-        '*3\r\n' +
-        '$11\r\nunsubscribe\r\n' +
-        encodeBulkString(null) +
-        encodeInteger(0)
-      );
+      results.push('*3\r\n' + '$11\r\nunsubscribe\r\n' + encodeBulkString(null) + encodeInteger(0));
     }
 
     return results;
@@ -120,10 +104,7 @@ export class PubSubManager {
       this.patternToConns.get(pattern)!.set(connId, sendFn);
       const total = this.totalSubCount(connId);
       results.push(
-        '*3\r\n' +
-        '$10\r\npsubscribe\r\n' +
-        encodeBulkString(pattern) +
-        encodeInteger(total)
+        '*3\r\n' + '$10\r\npsubscribe\r\n' + encodeBulkString(pattern) + encodeInteger(total)
       );
     }
     return results;
@@ -136,18 +117,13 @@ export class PubSubManager {
     if (!subs || subs.size === 0) {
       if (patterns.length === 0) {
         results.push(
-          '*3\r\n' +
-          '$12\r\npunsubscribe\r\n' +
-          encodeBulkString(null) +
-          encodeInteger(0)
+          '*3\r\n' + '$12\r\npunsubscribe\r\n' + encodeBulkString(null) + encodeInteger(0)
         );
         return results;
       }
     }
 
-    const toUnsub = patterns.length === 0
-      ? (subs ? Array.from(subs) : [])
-      : patterns;
+    const toUnsub = patterns.length === 0 ? (subs ? Array.from(subs) : []) : patterns;
 
     for (const pattern of toUnsub) {
       if (subs && subs.has(pattern)) {
@@ -162,10 +138,7 @@ export class PubSubManager {
       }
       const total = this.totalSubCount(connId);
       results.push(
-        '*3\r\n' +
-        '$12\r\npunsubscribe\r\n' +
-        encodeBulkString(pattern) +
-        encodeInteger(total)
+        '*3\r\n' + '$12\r\npunsubscribe\r\n' + encodeBulkString(pattern) + encodeInteger(total)
       );
     }
 
@@ -175,10 +148,7 @@ export class PubSubManager {
 
     if (patterns.length === 0 && results.length === 0) {
       results.push(
-        '*3\r\n' +
-        '$12\r\npunsubscribe\r\n' +
-        encodeBulkString(null) +
-        encodeInteger(0)
+        '*3\r\n' + '$12\r\npunsubscribe\r\n' + encodeBulkString(null) + encodeInteger(0)
       );
     }
 
@@ -194,10 +164,7 @@ export class PubSubManager {
     if (chConns) {
       for (const [connId, sendFn] of chConns) {
         const msg =
-          '*3\r\n' +
-          '$7\r\nmessage\r\n' +
-          encodeBulkString(channel) +
-          encodeBulkString(message);
+          '*3\r\n' + '$7\r\nmessage\r\n' + encodeBulkString(channel) + encodeBulkString(message);
         sendFn(msg);
         receivedConns.add(connId);
       }
@@ -226,12 +193,12 @@ export class PubSubManager {
   getChannels(pattern?: string): string[] {
     const channels = Array.from(this.channelToConns.keys());
     if (!pattern) return channels.sort();
-    return channels.filter(ch => globToRegex(pattern).test(ch)).sort();
+    return channels.filter((ch) => globToRegex(pattern).test(ch)).sort();
   }
 
   /** Get subscriber counts per channel. Returns array of [channel, count] pairs. */
   getNumSub(channels: string[]): [string, number][] {
-    return channels.map(ch => {
+    return channels.map((ch) => {
       const conns = this.channelToConns.get(ch);
       return [ch, conns ? conns.size : 0] as [string, number];
     });
@@ -279,6 +246,6 @@ export class PubSubManager {
   hasSubscriptions(connId: string): boolean {
     const ch = this.channelSubs.get(connId);
     const pt = this.patternSubs.get(connId);
-    return ((ch ? ch.size : 0) + (pt ? pt.size : 0)) > 0;
+    return (ch ? ch.size : 0) + (pt ? pt.size : 0) > 0;
   }
 }

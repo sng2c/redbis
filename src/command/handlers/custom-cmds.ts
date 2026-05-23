@@ -24,7 +24,7 @@ async function handleDelex(ctx: HandlerContext, args: string[]): Promise<string>
 }
 
 async function handleMsetex(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 3 || (args.length) % 3 !== 0) {
+  if (args.length < 3 || args.length % 3 !== 0) {
     return encodeError("wrong number of arguments for 'MSETEX' command");
   }
   const pairs: Array<{ key: string; seconds: number; value: string }> = [];

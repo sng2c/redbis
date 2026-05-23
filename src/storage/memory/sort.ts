@@ -3,14 +3,17 @@ import { assertTypeOneOf } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const sortMethods = {
-async sort(key: string, options?: {
-    byPattern?: string;
-    limit?: { offset: number; count: number };
-    getPatterns?: string[];
-    sortOrder?: 'ASC' | 'DESC';
-    alpha?: boolean;
-    store?: string;
-  }): Promise<string[] | number> {
+  async sort(
+    key: string,
+    options?: {
+      byPattern?: string;
+      limit?: { offset: number; count: number };
+      getPatterns?: string[];
+      sortOrder?: 'ASC' | 'DESC';
+      alpha?: boolean;
+      store?: string;
+    }
+  ): Promise<string[] | number> {
     this.evictIfExpired(key);
 
     // Check key type
@@ -42,11 +45,11 @@ async sort(key: string, options?: {
 
     // Apply BY pattern to get sort weights
     if (options?.byPattern) {
-      const lookupKeys = elements.map(el => options.byPattern!.replace('*', el));
+      const lookupKeys = elements.map((el) => options.byPattern!.replace('*', el));
       const weights = await this.mget(lookupKeys);
       const pairs: { element: string; weight: string | null }[] = elements.map((el, i) => ({
         element: el,
-        weight: weights[i]
+        weight: weights[i],
       }));
 
       // Sort using weights
@@ -65,14 +68,14 @@ async sort(key: string, options?: {
           const aNum = aVal === null ? 0 : parseFloat(aVal);
           const bNum = bVal === null ? 0 : parseFloat(bVal);
           if (isNaN(aNum) || isNaN(bNum)) {
-            throw new Error('ERR One or more scores can\'t be converted into double');
+            throw new Error("ERR One or more scores can't be converted into double");
           }
           cmp = aNum - bNum;
         }
         return sortOrder === 'DESC' ? -cmp : cmp;
       });
 
-      elements = pairs.map(p => p.element);
+      elements = pairs.map((p) => p.element);
     } else {
       // Sort by elements themselves
       const sortOrder = options?.sortOrder ?? 'ASC';
@@ -84,7 +87,7 @@ async sort(key: string, options?: {
           const aNum = parseFloat(a);
           const bNum = parseFloat(b);
           if (isNaN(aNum) || isNaN(bNum)) {
-            throw new Error('ERR One or more scores can\'t be converted into double');
+            throw new Error("ERR One or more scores can't be converted into double");
           }
           cmp = aNum - bNum;
         }
@@ -148,5 +151,4 @@ async sort(key: string, options?: {
 
     return elements;
   },
-
 };

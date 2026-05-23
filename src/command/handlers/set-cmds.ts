@@ -1,10 +1,5 @@
 import { HandlerContext, CommandFn } from '../context';
-import {
-  encodeError,
-  encodeInteger,
-  encodeBulkString,
-  encodeArray,
-} from '../../protocol/resp';
+import { encodeError, encodeInteger, encodeBulkString, encodeArray } from '../../protocol/resp';
 
 export function registerSetCommands(registry: Map<string, CommandFn>): void {
   registry.set('SADD', handleSadd);
@@ -81,7 +76,7 @@ async function handleSmismember(ctx: HandlerContext, args: string[]): Promise<st
   const key = args[0];
   const members = args.slice(1);
   const results = await ctx.storage.smismember(key, members);
-  const parts = results.map(r => encodeInteger(r ? 1 : 0));
+  const parts = results.map((r) => encodeInteger(r ? 1 : 0));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 

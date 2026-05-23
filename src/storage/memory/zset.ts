@@ -3,11 +3,11 @@ import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const zsetMethods = {
-_ensureZsetTypeOrThrow(key: string): void {
+  _ensureZsetTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'zset');
   },
 
-_ensureZsetKeyExists(key: string): void {
+  _ensureZsetKeyExists(key: string): void {
     if (!this.store.has(key)) {
       this.store.set(key, { value: '', type: 'zset', expiresAt: null });
     }
@@ -16,7 +16,7 @@ _ensureZsetKeyExists(key: string): void {
     }
   },
 
-_cleanupZsetIfEmpty(key: string): void {
+  _cleanupZsetIfEmpty(key: string): void {
     const entry = this.store.get(key);
     // CRITICAL: must check type === 'zset' before deleting (Phase 2 bug pattern)
     if (!entry || entry.type !== 'zset') return;
@@ -27,7 +27,7 @@ _cleanupZsetIfEmpty(key: string): void {
     }
   },
 
-_sortedMembers(key: string): Array<{ member: string; score: number }> {
+  _sortedMembers(key: string): Array<{ member: string; score: number }> {
     const zset = this.zsetStore.get(key);
     if (!zset) return [];
     return Array.from(zset.entries())
@@ -35,7 +35,7 @@ _sortedMembers(key: string): Array<{ member: string; score: number }> {
       .sort((a, b) => a.score - b.score || a.member.localeCompare(b.member));
   },
 
-_parseScoreBound(bound: number | string, _isMin: boolean): { value: number; exclusive: boolean } {
+  _parseScoreBound(bound: number | string, _isMin: boolean): { value: number; exclusive: boolean } {
     if (typeof bound === 'number') return { value: bound, exclusive: false };
     const str = String(bound);
     if (str === '-inf') return { value: -Infinity, exclusive: false };
@@ -46,7 +46,7 @@ _parseScoreBound(bound: number | string, _isMin: boolean): { value: number; excl
     return { value: parseFloat(str), exclusive: false };
   },
 
-_parseLexBound(bound: string): { value: string; exclusive: boolean; infinite: boolean } {
+  _parseLexBound(bound: string): { value: string; exclusive: boolean; infinite: boolean } {
     if (bound === '-') return { value: '', exclusive: false, infinite: true };
     if (bound === '+') return { value: '\uffff', exclusive: false, infinite: true };
     if (bound.startsWith('[')) return { value: bound.slice(1), exclusive: false, infinite: false };
@@ -54,23 +54,42 @@ _parseLexBound(bound: string): { value: string; exclusive: boolean; infinite: bo
     return { value: bound, exclusive: false, infinite: false };
   },
 
-_scoreInRange(score: number, min: { value: number; exclusive: boolean }, max: { value: number; exclusive: boolean }): boolean {
+  _scoreInRange(
+    score: number,
+    min: { value: number; exclusive: boolean },
+    max: { value: number; exclusive: boolean }
+  ): boolean {
     const minOk = min.exclusive ? score > min.value : score >= min.value;
     const maxOk = max.exclusive ? score < max.value : score <= max.value;
     return minOk && maxOk;
   },
 
-_memberInLexRange(member: string, min: { value: string; exclusive: boolean; infinite: boolean }, max: { value: string; exclusive: boolean; infinite: boolean }): boolean {
+  _memberInLexRange(
+    member: string,
+    min: { value: string; exclusive: boolean; infinite: boolean },
+    max: { value: string; exclusive: boolean; infinite: boolean }
+  ): boolean {
     const minOk = min.infinite || (min.exclusive ? member > min.value : member >= min.value);
     const maxOk = max.infinite || (max.exclusive ? member < max.value : member <= max.value);
     return minOk && maxOk;
   },
 
-_formatScore(score: number): string {
+  _formatScore(score: number): string {
     return parseFloat(score.toPrecision(15)).toString();
   },
 
-async zadd(key: string, scoreMembers: Array<{ score: number; member: string }>, options?: { nx?: boolean; xx?: boolean; gt?: boolean; lt?: boolean; ch?: boolean; incr?: boolean }): Promise<number | string | null> {
+  async zadd(
+    key: string,
+    scoreMembers: Array<{ score: number; member: string }>,
+    options?: {
+      nx?: boolean;
+      xx?: boolean;
+      gt?: boolean;
+      lt?: boolean;
+      ch?: boolean;
+      incr?: boolean;
+    }
+  ): Promise<number | string | null> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
 
@@ -124,7 +143,7 @@ async zadd(key: string, scoreMembers: Array<{ score: number; member: string }>, 
     return options?.ch ? added + changed : added;
   },
 
-async zrem(key: string, members: string[]): Promise<number> {
+  async zrem(key: string, members: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -137,7 +156,7 @@ async zrem(key: string, members: string[]): Promise<number> {
     return removed;
   },
 
-async zscore(key: string, member: string): Promise<string | null> {
+  async zscore(key: string, member: string): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -146,14 +165,19 @@ async zscore(key: string, member: string): Promise<string | null> {
     return score !== undefined ? this._formatScore(score) : null;
   },
 
-async zcard(key: string): Promise<number> {
+  async zcard(key: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
     return zset ? zset.size : 0;
   },
 
-async zrange(key: string, min: number | string, max: number | string, options?: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number }): Promise<Array<{ member: string; score: number }>> {
+  async zrange(
+    key: string,
+    min: number | string,
+    max: number | string,
+    options?: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number }
+  ): Promise<Array<{ member: string; score: number }>> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const sorted = this._sortedMembers(key);
@@ -168,10 +192,10 @@ async zrange(key: string, min: number | string, max: number | string, options?: 
       const parsedMax = this._parseScoreBound(max, false);
       // For rev, swap bounds
       if (rev) {
-        filtered = sorted.filter(item => this._scoreInRange(item.score, parsedMax, parsedMin));
+        filtered = sorted.filter((item) => this._scoreInRange(item.score, parsedMax, parsedMin));
         filtered.reverse();
       } else {
-        filtered = sorted.filter(item => this._scoreInRange(item.score, parsedMin, parsedMax));
+        filtered = sorted.filter((item) => this._scoreInRange(item.score, parsedMin, parsedMax));
       }
     } else if (options?.byLex) {
       // Lex mode
@@ -179,10 +203,14 @@ async zrange(key: string, min: number | string, max: number | string, options?: 
       const parsedMin = this._parseLexBound(String(min));
       const parsedMax = this._parseLexBound(String(max));
       if (rev) {
-        filtered = sorted.filter(item => this._memberInLexRange(item.member, parsedMax, parsedMin));
+        filtered = sorted.filter((item) =>
+          this._memberInLexRange(item.member, parsedMax, parsedMin)
+        );
         filtered.reverse();
       } else {
-        filtered = sorted.filter(item => this._memberInLexRange(item.member, parsedMin, parsedMax));
+        filtered = sorted.filter((item) =>
+          this._memberInLexRange(item.member, parsedMin, parsedMax)
+        );
       }
     } else {
       // Index mode
@@ -207,24 +235,24 @@ async zrange(key: string, min: number | string, max: number | string, options?: 
     return filtered;
   },
 
-async zrank(key: string, member: string): Promise<number | null> {
+  async zrank(key: string, member: string): Promise<number | null> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const sorted = this._sortedMembers(key);
-    const idx = sorted.findIndex(item => item.member === member);
+    const idx = sorted.findIndex((item) => item.member === member);
     return idx >= 0 ? idx : null;
   },
 
-async zrevrank(key: string, member: string): Promise<number | null> {
+  async zrevrank(key: string, member: string): Promise<number | null> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const sorted = this._sortedMembers(key);
-    const idx = sorted.findIndex(item => item.member === member);
+    const idx = sorted.findIndex((item) => item.member === member);
     if (idx < 0) return null;
     return sorted.length - 1 - idx;
   },
 
-async zincrby(key: string, increment: number, member: string): Promise<string> {
+  async zincrby(key: string, increment: number, member: string): Promise<string> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     this._ensureZsetKeyExists(key);
@@ -235,16 +263,16 @@ async zincrby(key: string, increment: number, member: string): Promise<string> {
     return this._formatScore(newScore);
   },
 
-async zcount(key: string, min: number | string, max: number | string): Promise<number> {
+  async zcount(key: string, min: number | string, max: number | string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const sorted = this._sortedMembers(key);
     const parsedMin = this._parseScoreBound(min, true);
     const parsedMax = this._parseScoreBound(max, false);
-    return sorted.filter(item => this._scoreInRange(item.score, parsedMin, parsedMax)).length;
+    return sorted.filter((item) => this._scoreInRange(item.score, parsedMin, parsedMax)).length;
   },
 
-async zremrangebyrank(key: string, start: number, stop: number): Promise<number> {
+  async zremrangebyrank(key: string, start: number, stop: number): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -265,7 +293,7 @@ async zremrangebyrank(key: string, start: number, stop: number): Promise<number>
     return toRemove.length;
   },
 
-async zremrangebyscore(key: string, min: number | string, max: number | string): Promise<number> {
+  async zremrangebyscore(key: string, min: number | string, max: number | string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -273,7 +301,7 @@ async zremrangebyscore(key: string, min: number | string, max: number | string):
     const sorted = this._sortedMembers(key);
     const parsedMin = this._parseScoreBound(min, true);
     const parsedMax = this._parseScoreBound(max, false);
-    const toRemove = sorted.filter(item => this._scoreInRange(item.score, parsedMin, parsedMax));
+    const toRemove = sorted.filter((item) => this._scoreInRange(item.score, parsedMin, parsedMax));
     for (const item of toRemove) {
       zset.delete(item.member);
     }
@@ -281,7 +309,7 @@ async zremrangebyscore(key: string, min: number | string, max: number | string):
     return toRemove.length;
   },
 
-async zremrangebylex(key: string, min: string, max: string): Promise<number> {
+  async zremrangebylex(key: string, min: string, max: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -289,7 +317,9 @@ async zremrangebylex(key: string, min: string, max: string): Promise<number> {
     const sorted = this._sortedMembers(key);
     const parsedMin = this._parseLexBound(min);
     const parsedMax = this._parseLexBound(max);
-    const toRemove = sorted.filter(item => this._memberInLexRange(item.member, parsedMin, parsedMax));
+    const toRemove = sorted.filter((item) =>
+      this._memberInLexRange(item.member, parsedMin, parsedMax)
+    );
     for (const item of toRemove) {
       zset.delete(item.member);
     }
@@ -297,16 +327,22 @@ async zremrangebylex(key: string, min: string, max: string): Promise<number> {
     return toRemove.length;
   },
 
-async zlexcount(key: string, min: string, max: string): Promise<number> {
+  async zlexcount(key: string, min: string, max: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const sorted = this._sortedMembers(key);
     const parsedMin = this._parseLexBound(min);
     const parsedMax = this._parseLexBound(max);
-    return sorted.filter(item => this._memberInLexRange(item.member, parsedMin, parsedMax)).length;
+    return sorted.filter((item) => this._memberInLexRange(item.member, parsedMin, parsedMax))
+      .length;
   },
 
-async zscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]> {
+  async zscan(
+    key: string,
+    cursor: number,
+    pattern?: string,
+    count?: number
+  ): Promise<[number, string[]]> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -328,7 +364,7 @@ async zscan(key: string, cursor: number, pattern?: string, count?: number): Prom
     return [nextCursor, result];
   },
 
-async zpopmax(key: string, count?: number): Promise<Array<{ member: string; score: number }>> {
+  async zpopmax(key: string, count?: number): Promise<Array<{ member: string; score: number }>> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -343,7 +379,7 @@ async zpopmax(key: string, count?: number): Promise<Array<{ member: string; scor
     return toPop;
   },
 
-async zpopmin(key: string, count?: number): Promise<Array<{ member: string; score: number }>> {
+  async zpopmin(key: string, count?: number): Promise<Array<{ member: string; score: number }>> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -358,7 +394,10 @@ async zpopmin(key: string, count?: number): Promise<Array<{ member: string; scor
     return toPop;
   },
 
-async zrandmember(key: string, count?: number): Promise<Array<{ member: string; score: number }>> {
+  async zrandmember(
+    key: string,
+    count?: number
+  ): Promise<Array<{ member: string; score: number }>> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
@@ -384,18 +423,24 @@ async zrandmember(key: string, count?: number): Promise<Array<{ member: string; 
     }
   },
 
-async zmscore(key: string, members: string[]): Promise<(string | null)[]> {
+  async zmscore(key: string, members: string[]): Promise<(string | null)[]> {
     this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(key);
     const zset = this.zsetStore.get(key);
     if (!zset) return members.map(() => null);
-    return members.map(member => {
+    return members.map((member) => {
       const score = zset.get(member);
       return score !== undefined ? this._formatScore(score) : null;
     });
   },
 
-async zrangestore(destination: string, source: string, min: number | string, max: number | string, options?: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number }): Promise<number> {
+  async zrangestore(
+    destination: string,
+    source: string,
+    min: number | string,
+    max: number | string,
+    options?: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number }
+  ): Promise<number> {
     this.evictIfExpired(destination);
     this.evictIfExpired(source);
     this._ensureZsetTypeOrThrow(source);
@@ -419,7 +464,7 @@ async zrangestore(destination: string, source: string, min: number | string, max
     return range.length;
   },
 
-async zdiff(keys: string[]): Promise<Array<{ member: string; score: number }>> {
+  async zdiff(keys: string[]): Promise<Array<{ member: string; score: number }>> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureZsetTypeOrThrow(key);
     if (keys.length === 0) return [];
@@ -442,7 +487,7 @@ async zdiff(keys: string[]): Promise<Array<{ member: string; score: number }>> {
     return result;
   },
 
-async zdiffstore(destination: string, keys: string[]): Promise<number> {
+  async zdiffstore(destination: string, keys: string[]): Promise<number> {
     this.evictIfExpired(destination);
     for (const key of keys) this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(destination);
@@ -465,7 +510,10 @@ async zdiffstore(destination: string, keys: string[]): Promise<number> {
     return diff.length;
   },
 
-async zunion(keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<Array<{ member: string; score: number }>> {
+  async zunion(
+    keys: string[],
+    options?: { weights?: number[]; aggregate?: string }
+  ): Promise<Array<{ member: string; score: number }>> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureZsetTypeOrThrow(key);
     if (keys.length === 0) return [];
@@ -497,7 +545,11 @@ async zunion(keys: string[], options?: { weights?: number[]; aggregate?: string 
     return result;
   },
 
-async zunionstore(destination: string, keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<number> {
+  async zunionstore(
+    destination: string,
+    keys: string[],
+    options?: { weights?: number[]; aggregate?: string }
+  ): Promise<number> {
     this.evictIfExpired(destination);
     for (const key of keys) this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(destination);
@@ -520,7 +572,10 @@ async zunionstore(destination: string, keys: string[], options?: { weights?: num
     return union.length;
   },
 
-async zinter(keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<Array<{ member: string; score: number }>> {
+  async zinter(
+    keys: string[],
+    options?: { weights?: number[]; aggregate?: string }
+  ): Promise<Array<{ member: string; score: number }>> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureZsetTypeOrThrow(key);
     if (keys.length === 0) return [];
@@ -555,7 +610,11 @@ async zinter(keys: string[], options?: { weights?: number[]; aggregate?: string 
     return result;
   },
 
-async zinterstore(destination: string, keys: string[], options?: { weights?: number[]; aggregate?: string }): Promise<number> {
+  async zinterstore(
+    destination: string,
+    keys: string[],
+    options?: { weights?: number[]; aggregate?: string }
+  ): Promise<number> {
     this.evictIfExpired(destination);
     for (const key of keys) this.evictIfExpired(key);
     this._ensureZsetTypeOrThrow(destination);
@@ -578,7 +637,7 @@ async zinterstore(destination: string, keys: string[], options?: { weights?: num
     return inter.length;
   },
 
-async zintercard(keys: string[], limit?: number): Promise<number> {
+  async zintercard(keys: string[], limit?: number): Promise<number> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureZsetTypeOrThrow(key);
     if (keys.length === 0) return 0;
@@ -601,7 +660,10 @@ async zintercard(keys: string[], limit?: number): Promise<number> {
     return limit !== undefined ? Math.min(count, limit) : count;
   },
 
-async bzpopmax(keys: string[], timeout: number): Promise<{ key: string; member: string; score: number } | null> {
+  async bzpopmax(
+    keys: string[],
+    timeout: number
+  ): Promise<{ key: string; member: string; score: number } | null> {
     for (const key of keys) {
       this.evictIfExpired(key);
       this._ensureZsetTypeOrThrow(key);
@@ -617,7 +679,10 @@ async bzpopmax(keys: string[], timeout: number): Promise<{ key: string; member: 
     return null;
   },
 
-async bzpopmin(keys: string[], timeout: number): Promise<{ key: string; member: string; score: number } | null> {
+  async bzpopmin(
+    keys: string[],
+    timeout: number
+  ): Promise<{ key: string; member: string; score: number } | null> {
     for (const key of keys) {
       this.evictIfExpired(key);
       this._ensureZsetTypeOrThrow(key);
@@ -633,7 +698,12 @@ async bzpopmin(keys: string[], timeout: number): Promise<{ key: string; member: 
     return null;
   },
 
-async bzmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null> {
+  async bzmpop(
+    numkeys: number,
+    keys: string[],
+    minmax: 'MIN' | 'MAX',
+    count?: number
+  ): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null> {
     const effectiveCount = count ?? 1;
     for (const key of keys) {
       this.evictIfExpired(key);
@@ -660,8 +730,12 @@ async bzmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: num
     return null;
   },
 
-async zmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null> {
+  async zmpop(
+    numkeys: number,
+    keys: string[],
+    minmax: 'MIN' | 'MAX',
+    count?: number
+  ): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null> {
     return this.bzmpop(numkeys, keys, minmax, count);
   },
-
 };

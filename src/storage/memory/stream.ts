@@ -1,24 +1,37 @@
 // @ts-nocheck
 import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
-import type { StreamEntry, StreamConsumer, StreamInfo, GroupInfo, PendingEntry } from '../interface';
+import type {
+  StreamEntry,
+  StreamConsumer,
+  StreamInfo,
+  GroupInfo,
+  PendingEntry,
+} from '../interface';
 import type { StreamData, InternalStreamGroup, InternalStreamConsumer } from './types';
 
 export const streamMethods = {
-_ensureStreamTypeOrThrow(key: string): void {
+  _ensureStreamTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'stream');
   },
 
-_ensureStreamKeyExists(key: string): void {
+  _ensureStreamKeyExists(key: string): void {
     if (!this.store.has(key)) {
       this.store.set(key, { value: '', type: 'stream', expiresAt: null });
     }
     if (!this.streamStore.has(key)) {
-      this.streamStore.set(key, { entries: [], groups: new Map(), lastId: '0-0', maxDeletedId: '0-0', entriesAdded: 0, recordedFirstId: '0-0' });
+      this.streamStore.set(key, {
+        entries: [],
+        groups: new Map(),
+        lastId: '0-0',
+        maxDeletedId: '0-0',
+        entriesAdded: 0,
+        recordedFirstId: '0-0',
+      });
     }
   },
 
-_cleanupStreamIfEmpty(key: string): void {
+  _cleanupStreamIfEmpty(key: string): void {
     const entry = this.store.get(key);
     if (!entry || entry.type !== 'stream') return;
     const stream = this.streamStore.get(key);
@@ -28,25 +41,25 @@ _cleanupStreamIfEmpty(key: string): void {
     }
   },
 
-_parseStreamId(id: string): { ms: number; seq: number } {
+  _parseStreamId(id: string): { ms: number; seq: number } {
     if (id === '-') return { ms: 0, seq: 0 };
     if (id === '+') return { ms: Infinity, seq: Infinity };
     const parts = id.split('-');
     return { ms: parseInt(parts[0], 10), seq: parseInt(parts[1], 10) };
   },
 
-_formatStreamId(ms: number, seq: number): string {
+  _formatStreamId(ms: number, seq: number): string {
     return `${ms}-${seq}`;
   },
 
-_compareStreamId(a: string, b: string): number {
+  _compareStreamId(a: string, b: string): number {
     const pa = this._parseStreamId(a);
     const pb = this._parseStreamId(b);
     if (pa.ms !== pb.ms) return pa.ms - pb.ms;
     return pa.seq - pb.seq;
   },
 
-_generateStreamId(key: string, id: string): string | null {
+  _generateStreamId(key: string, id: string): string | null {
     const stream = this.streamStore.get(key);
     const lastId = stream ? stream.lastId : '0-0';
 
@@ -82,7 +95,7 @@ _generateStreamId(key: string, id: string): string | null {
     return id;
   },
 
-_binarySearchStreamEntry(entries: StreamEntry[], id: string, findFirst: boolean): number {
+  _binarySearchStreamEntry(entries: StreamEntry[], id: string, findFirst: boolean): number {
     let left = 0;
     let right = entries.length;
     const parsedId = this._parseStreamId(id);
@@ -90,7 +103,8 @@ _binarySearchStreamEntry(entries: StreamEntry[], id: string, findFirst: boolean)
     while (left < right) {
       const mid = (left + right) >> 1;
       const midParsed = this._parseStreamId(entries[mid].id);
-      const cmp = midParsed.ms !== parsedId.ms ? midParsed.ms - parsedId.ms : midParsed.seq - parsedId.seq;
+      const cmp =
+        midParsed.ms !== parsedId.ms ? midParsed.ms - parsedId.ms : midParsed.seq - parsedId.seq;
       if (findFirst ? cmp < 0 : cmp <= 0) {
         left = mid + 1;
       } else {
@@ -100,7 +114,12 @@ _binarySearchStreamEntry(entries: StreamEntry[], id: string, findFirst: boolean)
     return left;
   },
 
-async xadd(key: string, id: string, fields: Record<string, string>, options?: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean }): Promise<string | null> {
+  async xadd(
+    key: string,
+    id: string,
+    fields: Record<string, string>,
+    options?: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean }
+  ): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -114,7 +133,9 @@ async xadd(key: string, id: string, fields: Record<string, string>, options?: { 
 
     const generatedId = this._generateStreamId(key, id);
     if (generatedId === null) {
-      throw new Error('ERR The ID specified in XADD is equal or smaller than the target stream top item');
+      throw new Error(
+        'ERR The ID specified in XADD is equal or smaller than the target stream top item'
+      );
     }
 
     const entry: StreamEntry = {
@@ -142,7 +163,13 @@ async xadd(key: string, id: string, fields: Record<string, string>, options?: { 
     return generatedId;
   },
 
-async xtrim(key: string, strategy: 'MAXLEN' | 'MINID', threshold: string | number, approx?: boolean, limit?: number): Promise<number> {
+  async xtrim(
+    key: string,
+    strategy: 'MAXLEN' | 'MINID',
+    threshold: string | number,
+    approx?: boolean,
+    limit?: number
+  ): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -162,7 +189,7 @@ async xtrim(key: string, strategy: 'MAXLEN' | 'MINID', threshold: string | numbe
     } else {
       // MINID strategy
       const minId = String(threshold);
-      const firstToKeep = stream.entries.findIndex(e => this._compareStreamId(e.id, minId) >= 0);
+      const firstToKeep = stream.entries.findIndex((e) => this._compareStreamId(e.id, minId) >= 0);
       if (firstToKeep === 0) return 0; // All entries are >= minId
       if (firstToKeep === -1) {
         // All entries are < minId — remove all
@@ -192,7 +219,7 @@ async xtrim(key: string, strategy: 'MAXLEN' | 'MINID', threshold: string | numbe
     return removeCount;
   },
 
-async xdel(key: string, ids: string[]): Promise<number> {
+  async xdel(key: string, ids: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -201,7 +228,7 @@ async xdel(key: string, ids: string[]): Promise<number> {
 
     let removed = 0;
     for (const id of ids) {
-      const idx = stream.entries.findIndex(e => e.id === id);
+      const idx = stream.entries.findIndex((e) => e.id === id);
       if (idx !== -1) {
         stream.entries.splice(idx, 1);
         removed++;
@@ -220,7 +247,7 @@ async xdel(key: string, ids: string[]): Promise<number> {
     return removed;
   },
 
-async xrange(key: string, start: string, end: string, count?: number): Promise<StreamEntry[]> {
+  async xrange(key: string, start: string, end: string, count?: number): Promise<StreamEntry[]> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -232,7 +259,10 @@ async xrange(key: string, start: string, end: string, count?: number): Promise<S
 
     let results: StreamEntry[] = [];
     for (const entry of stream.entries) {
-      if (this._compareStreamId(entry.id, startId) >= 0 && this._compareStreamId(entry.id, endId) <= 0) {
+      if (
+        this._compareStreamId(entry.id, startId) >= 0 &&
+        this._compareStreamId(entry.id, endId) <= 0
+      ) {
         results.push(entry);
       }
     }
@@ -244,7 +274,7 @@ async xrange(key: string, start: string, end: string, count?: number): Promise<S
     return results;
   },
 
-async xrevrange(key: string, end: string, start: string, count?: number): Promise<StreamEntry[]> {
+  async xrevrange(key: string, end: string, start: string, count?: number): Promise<StreamEntry[]> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -257,7 +287,10 @@ async xrevrange(key: string, end: string, start: string, count?: number): Promis
     let results: StreamEntry[] = [];
     for (let i = stream.entries.length - 1; i >= 0; i--) {
       const entry = stream.entries[i];
-      if (this._compareStreamId(entry.id, startId) >= 0 && this._compareStreamId(entry.id, endId) <= 0) {
+      if (
+        this._compareStreamId(entry.id, startId) >= 0 &&
+        this._compareStreamId(entry.id, endId) <= 0
+      ) {
         results.push(entry);
       }
     }
@@ -269,14 +302,18 @@ async xrevrange(key: string, end: string, start: string, count?: number): Promis
     return results;
   },
 
-async xlen(key: string): Promise<number> {
+  async xlen(key: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
     const stream = this.streamStore.get(key);
     return stream ? stream.entries.length : 0;
   },
 
-async xread(keys: string[], ids: string[], count?: number): Promise<Array<{ key: string; entries: StreamEntry[] }> | null> {
+  async xread(
+    keys: string[],
+    ids: string[],
+    count?: number
+  ): Promise<Array<{ key: string; entries: StreamEntry[] }> | null> {
     const results: Array<{ key: string; entries: StreamEntry[] }> = [];
 
     for (let i = 0; i < keys.length; i++) {
@@ -303,7 +340,7 @@ async xread(keys: string[], ids: string[], count?: number): Promise<Array<{ key:
     return results.length > 0 ? results : null;
   },
 
-async xgroupCreate(key: string, group: string, id: string, mkstream?: boolean): Promise<string> {
+  async xgroupCreate(key: string, group: string, id: string, mkstream?: boolean): Promise<string> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -333,7 +370,7 @@ async xgroupCreate(key: string, group: string, id: string, mkstream?: boolean): 
     return 'OK';
   },
 
-async xgroupDestroy(key: string, group: string): Promise<number> {
+  async xgroupDestroy(key: string, group: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -343,7 +380,7 @@ async xgroupDestroy(key: string, group: string): Promise<number> {
     return stream.groups.delete(group) ? 1 : 0;
   },
 
-async xgroupCreateconsumer(key: string, group: string, consumer: string): Promise<number> {
+  async xgroupCreateconsumer(key: string, group: string, consumer: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -366,7 +403,7 @@ async xgroupCreateconsumer(key: string, group: string, consumer: string): Promis
     return 1;
   },
 
-async xgroupDelconsumer(key: string, group: string, consumer: string): Promise<number> {
+  async xgroupDelconsumer(key: string, group: string, consumer: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -380,18 +417,18 @@ async xgroupDelconsumer(key: string, group: string, consumer: string): Promise<n
     if (!c) return 0;
 
     // Count pending entries for this consumer in this group
-    const pendingCount = grp.pending.filter(p => p.consumer === consumer).length;
+    const pendingCount = grp.pending.filter((p) => p.consumer === consumer).length;
 
     // Remove consumer
     grp.consumers.delete(consumer);
 
     // Remove pending entries for this consumer
-    grp.pending = grp.pending.filter(p => p.consumer !== consumer);
+    grp.pending = grp.pending.filter((p) => p.consumer !== consumer);
 
     return pendingCount;
   },
 
-async xgroupSetid(key: string, group: string, id: string): Promise<string> {
+  async xgroupSetid(key: string, group: string, id: string): Promise<string> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -405,7 +442,14 @@ async xgroupSetid(key: string, group: string, id: string): Promise<string> {
     return 'OK';
   },
 
-async xreadgroup(group: string, consumer: string, keys: string[], ids: string[], count?: number, noack?: boolean): Promise<Array<{ key: string; entries: StreamEntry[] }> | null> {
+  async xreadgroup(
+    group: string,
+    consumer: string,
+    keys: string[],
+    ids: string[],
+    count?: number,
+    noack?: boolean
+  ): Promise<Array<{ key: string; entries: StreamEntry[] }> | null> {
     const results: Array<{ key: string; entries: StreamEntry[] }> = [];
 
     for (let i = 0; i < keys.length; i++) {
@@ -478,7 +522,7 @@ async xreadgroup(group: string, consumer: string, keys: string[], ids: string[],
 
         for (const pending of grp.pending) {
           if (pending.consumer === consumer && this._compareStreamId(pending.id, startId) > 0) {
-            const streamEntry = stream.entries.find(e => e.id === pending.id);
+            const streamEntry = stream.entries.find((e) => e.id === pending.id);
             if (streamEntry) {
               entries.push(streamEntry);
               if (count !== undefined && entries.length >= count) break;
@@ -497,7 +541,7 @@ async xreadgroup(group: string, consumer: string, keys: string[], ids: string[],
     return results.length > 0 ? results : null;
   },
 
-async xack(key: string, group: string, ids: string[]): Promise<number> {
+  async xack(key: string, group: string, ids: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -512,7 +556,7 @@ async xack(key: string, group: string, ids: string[]): Promise<number> {
 
     // Remove from pending
     const originalLength = grp.pending.length;
-    grp.pending = grp.pending.filter(p => {
+    grp.pending = grp.pending.filter((p) => {
       if (idSet.has(p.id)) {
         acknowledged++;
         // Decrement consumer's pending count
@@ -528,7 +572,19 @@ async xack(key: string, group: string, ids: string[]): Promise<number> {
     return acknowledged;
   },
 
-async xpending(key: string, group: string, options?: { start?: string; end?: string; count?: number; consumer?: string; idle?: number }): Promise<PendingEntry[] | { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> }> {
+  async xpending(
+    key: string,
+    group: string,
+    options?: { start?: string; end?: string; count?: number; consumer?: string; idle?: number }
+  ): Promise<
+    | PendingEntry[]
+    | {
+        count: number;
+        minId: string | null;
+        maxId: string | null;
+        consumers: Array<{ name: string; pending: number }>;
+      }
+  > {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -546,21 +602,23 @@ async xpending(key: string, group: string, options?: { start?: string; end?: str
       if (options?.idle !== undefined) {
         const now = Date.now();
         const minIdle = options.idle;
-        pending = pending.filter(p => now - p.deliveredTime > minIdle);
+        pending = pending.filter((p) => now - p.deliveredTime > minIdle);
       }
 
       // Filter by ID range
       if (options?.start !== undefined && options?.end !== undefined) {
         const startId = options.start === '-' ? '0-0' : options.start;
         const endId = options.end === '+' ? '9999999999999-9999' : options.end;
-        pending = pending.filter(p => {
-          return this._compareStreamId(p.id, startId) >= 0 && this._compareStreamId(p.id, endId) <= 0;
+        pending = pending.filter((p) => {
+          return (
+            this._compareStreamId(p.id, startId) >= 0 && this._compareStreamId(p.id, endId) <= 0
+          );
         });
       }
 
       // Filter by consumer
       if (options?.consumer) {
-        pending = pending.filter(p => p.consumer === options.consumer);
+        pending = pending.filter((p) => p.consumer === options.consumer);
       }
 
       // Apply count limit
@@ -577,17 +635,45 @@ async xpending(key: string, group: string, options?: { start?: string; end?: str
       consumerMap.set(p.consumer, (consumerMap.get(p.consumer) ?? 0) + 1);
     }
 
-    const consumers = Array.from(consumerMap.entries()).map(([name, pending]) => ({ name, pending }));
+    const consumers = Array.from(consumerMap.entries()).map(([name, pending]) => ({
+      name,
+      pending,
+    }));
 
     return {
       count: grp.pending.length,
-      minId: grp.pending.length > 0 ? grp.pending.reduce((min, p) => this._compareStreamId(p.id, min) < 0 ? p.id : min, grp.pending[0].id) : null,
-      maxId: grp.pending.length > 0 ? grp.pending.reduce((max, p) => this._compareStreamId(p.id, max) > 0 ? p.id : max, grp.pending[0].id) : null,
+      minId:
+        grp.pending.length > 0
+          ? grp.pending.reduce(
+              (min, p) => (this._compareStreamId(p.id, min) < 0 ? p.id : min),
+              grp.pending[0].id
+            )
+          : null,
+      maxId:
+        grp.pending.length > 0
+          ? grp.pending.reduce(
+              (max, p) => (this._compareStreamId(p.id, max) > 0 ? p.id : max),
+              grp.pending[0].id
+            )
+          : null,
       consumers,
     };
   },
 
-async xclaim(key: string, group: string, consumer: string, minIdleTime: number, ids: string[], options?: { idle?: number; time?: number; retrycount?: number; force?: boolean; justid?: boolean }): Promise<StreamEntry[] | string[]> {
+  async xclaim(
+    key: string,
+    group: string,
+    consumer: string,
+    minIdleTime: number,
+    ids: string[],
+    options?: {
+      idle?: number;
+      time?: number;
+      retrycount?: number;
+      force?: boolean;
+      justid?: boolean;
+    }
+  ): Promise<StreamEntry[] | string[]> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -613,11 +699,11 @@ async xclaim(key: string, group: string, consumer: string, minIdleTime: number, 
     }
 
     for (const id of ids) {
-      const pendingIdx = grp.pending.findIndex(p => p.id === id);
+      const pendingIdx = grp.pending.findIndex((p) => p.id === id);
       if (pendingIdx === -1) {
         if (options?.force) {
           // Force create pending entry even if not found
-          const entry = stream.entries.find(e => e.id === id);
+          const entry = stream.entries.find((e) => e.id === id);
           if (entry) {
             const newPending: PendingEntry = {
               id,
@@ -662,7 +748,7 @@ async xclaim(key: string, group: string, consumer: string, minIdleTime: number, 
 
       grp.consumers.get(consumer)!.pendingCount++;
 
-      const entry = stream.entries.find(e => e.id === id);
+      const entry = stream.entries.find((e) => e.id === id);
       if (entry) {
         entries.push(entry);
       }
@@ -676,7 +762,14 @@ async xclaim(key: string, group: string, consumer: string, minIdleTime: number, 
     return entries;
   },
 
-async xautoclaim(key: string, group: string, consumer: string, minIdleTime: number, start: string, options?: { count?: number; justid?: boolean }): Promise<{ nextStartId: string; entries: StreamEntry[] | string[] }> {
+  async xautoclaim(
+    key: string,
+    group: string,
+    consumer: string,
+    minIdleTime: number,
+    start: string,
+    options?: { count?: number; justid?: boolean }
+  ): Promise<{ nextStartId: string; entries: StreamEntry[] | string[] }> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -731,7 +824,7 @@ async xautoclaim(key: string, group: string, consumer: string, minIdleTime: numb
         pending.lastDeliveredTime = now;
         grp.consumers.get(consumer)!.pendingCount++;
 
-        const entry = stream.entries.find(e => e.id === pending.id);
+        const entry = stream.entries.find((e) => e.id === pending.id);
         if (entry) {
           claimedEntries.push(entry);
         }
@@ -746,7 +839,7 @@ async xautoclaim(key: string, group: string, consumer: string, minIdleTime: numb
     };
   },
 
-async xinfoStream(key: string): Promise<StreamInfo> {
+  async xinfoStream(key: string): Promise<StreamInfo> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -764,7 +857,7 @@ async xinfoStream(key: string): Promise<StreamInfo> {
     };
   },
 
-async xinfoGroups(key: string): Promise<GroupInfo[]> {
+  async xinfoGroups(key: string): Promise<GroupInfo[]> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -785,7 +878,7 @@ async xinfoGroups(key: string): Promise<GroupInfo[]> {
     return result;
   },
 
-async xinfoConsumers(key: string, group: string): Promise<StreamConsumer[]> {
+  async xinfoConsumers(key: string, group: string): Promise<StreamConsumer[]> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -809,7 +902,7 @@ async xinfoConsumers(key: string, group: string): Promise<StreamConsumer[]> {
     return result;
   },
 
-async xsetid(key: string, id: string): Promise<string> {
+  async xsetid(key: string, id: string): Promise<string> {
     this.evictIfExpired(key);
     this._ensureStreamTypeOrThrow(key);
 
@@ -819,5 +912,4 @@ async xsetid(key: string, id: string): Promise<string> {
     stream.lastId = id;
     return 'OK';
   },
-
 };

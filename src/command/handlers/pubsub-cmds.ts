@@ -42,13 +42,13 @@ function handlePunsubscribe(ctx: HandlerContext, args: string[]): string {
 }
 
 async function handlePublish(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 2) return encodeError('wrong number of arguments for \'PUBLISH\' command');
+  if (args.length < 2) return encodeError("wrong number of arguments for 'PUBLISH' command");
   const count = ctx.pubsub.publish(args[0], args[1]);
   return encodeInteger(count);
 }
 
 async function handleSpublish(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 2) return encodeError('wrong number of arguments for \'SPUBLISH\' command');
+  if (args.length < 2) return encodeError("wrong number of arguments for 'SPUBLISH' command");
   const count = ctx.pubsub.publish(args[0], args[1]);
   return encodeInteger(count);
 }

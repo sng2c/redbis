@@ -3,11 +3,11 @@ import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const setMethods = {
-_ensureSetTypeOrThrow(key: string): void {
+  _ensureSetTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'set');
   },
 
-_cleanupSetIfEmpty(key: string): void {
+  _cleanupSetIfEmpty(key: string): void {
     const entry = this.store.get(key);
     if (!entry || entry.type !== 'set') return;
     const set = this.setStore.get(key);
@@ -17,7 +17,7 @@ _cleanupSetIfEmpty(key: string): void {
     }
   },
 
-async sadd(key: string, members: string[]): Promise<number> {
+  async sadd(key: string, members: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     if (!this.store.has(key)) {
@@ -38,7 +38,7 @@ async sadd(key: string, members: string[]): Promise<number> {
     return added;
   },
 
-async srem(key: string, members: string[]): Promise<number> {
+  async srem(key: string, members: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
@@ -51,7 +51,7 @@ async srem(key: string, members: string[]): Promise<number> {
     return removed;
   },
 
-async smembers(key: string): Promise<string[]> {
+  async smembers(key: string): Promise<string[]> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
@@ -59,29 +59,29 @@ async smembers(key: string): Promise<string[]> {
     return Array.from(set);
   },
 
-async scard(key: string): Promise<number> {
+  async scard(key: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
     return set ? set.size : 0;
   },
 
-async sismember(key: string, member: string): Promise<boolean> {
+  async sismember(key: string, member: string): Promise<boolean> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
     return set ? set.has(member) : false;
   },
 
-async smismember(key: string, members: string[]): Promise<boolean[]> {
+  async smismember(key: string, members: string[]): Promise<boolean[]> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
     if (!set) return members.map(() => false);
-    return members.map(m => set.has(m));
+    return members.map((m) => set.has(m));
   },
 
-async srandmember(key: string, count?: number): Promise<string[]> {
+  async srandmember(key: string, count?: number): Promise<string[]> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
@@ -113,7 +113,7 @@ async srandmember(key: string, count?: number): Promise<string[]> {
     }
   },
 
-async spop(key: string, count?: number): Promise<string[]> {
+  async spop(key: string, count?: number): Promise<string[]> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
@@ -140,7 +140,7 @@ async spop(key: string, count?: number): Promise<string[]> {
     return popped;
   },
 
-async smove(source: string, destination: string, member: string): Promise<boolean> {
+  async smove(source: string, destination: string, member: string): Promise<boolean> {
     this.evictIfExpired(source);
     this.evictIfExpired(destination);
     this._ensureSetTypeOrThrow(source);
@@ -167,7 +167,7 @@ async smove(source: string, destination: string, member: string): Promise<boolea
     return true;
   },
 
-async sdiff(keys: string[]): Promise<string[]> {
+  async sdiff(keys: string[]): Promise<string[]> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureSetTypeOrThrow(key);
     if (keys.length === 0) return [];
@@ -185,7 +185,7 @@ async sdiff(keys: string[]): Promise<string[]> {
     return Array.from(firstMembers);
   },
 
-async sinter(keys: string[]): Promise<string[]> {
+  async sinter(keys: string[]): Promise<string[]> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureSetTypeOrThrow(key);
     if (keys.length === 0) return [];
@@ -205,7 +205,7 @@ async sinter(keys: string[]): Promise<string[]> {
     return Array.from(result);
   },
 
-async sunion(keys: string[]): Promise<string[]> {
+  async sunion(keys: string[]): Promise<string[]> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureSetTypeOrThrow(key);
     if (keys.length === 0) return [];
@@ -221,7 +221,7 @@ async sunion(keys: string[]): Promise<string[]> {
     return Array.from(result);
   },
 
-async sdiffstore(destination: string, keys: string[]): Promise<number> {
+  async sdiffstore(destination: string, keys: string[]): Promise<number> {
     this.evictIfExpired(destination);
     this._ensureSetTypeOrThrow(destination);
     for (const key of keys) this.evictIfExpired(key);
@@ -238,7 +238,7 @@ async sdiffstore(destination: string, keys: string[]): Promise<number> {
     return diff.length;
   },
 
-async sinterstore(destination: string, keys: string[]): Promise<number> {
+  async sinterstore(destination: string, keys: string[]): Promise<number> {
     this.evictIfExpired(destination);
     this._ensureSetTypeOrThrow(destination);
     for (const key of keys) this.evictIfExpired(key);
@@ -255,7 +255,7 @@ async sinterstore(destination: string, keys: string[]): Promise<number> {
     return inter.length;
   },
 
-async sunionstore(destination: string, keys: string[]): Promise<number> {
+  async sunionstore(destination: string, keys: string[]): Promise<number> {
     this.evictIfExpired(destination);
     this._ensureSetTypeOrThrow(destination);
     for (const key of keys) this.evictIfExpired(key);
@@ -272,7 +272,7 @@ async sunionstore(destination: string, keys: string[]): Promise<number> {
     return union.length;
   },
 
-async sintercard(keys: string[], limit?: number): Promise<number> {
+  async sintercard(keys: string[], limit?: number): Promise<number> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureSetTypeOrThrow(key);
     const inter = await this.sinter(keys);
@@ -282,7 +282,12 @@ async sintercard(keys: string[], limit?: number): Promise<number> {
     return inter.length;
   },
 
-async sscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]> {
+  async sscan(
+    key: string,
+    cursor: number,
+    pattern?: string,
+    count?: number
+  ): Promise<[number, string[]]> {
     this.evictIfExpired(key);
     this._ensureSetTypeOrThrow(key);
     const set = this.setStore.get(key);
@@ -305,5 +310,4 @@ async sscan(key: string, cursor: number, pattern?: string, count?: number): Prom
     const nextCursor = idx >= allMembers.length ? 0 : idx;
     return [nextCursor, matchedMembers];
   },
-
 };

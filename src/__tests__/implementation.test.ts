@@ -243,7 +243,7 @@ describe('createStorage 팩토리', () => {
       databaseUrl: 'cassandra://host',
     };
     expect(() => createStorage(cfg as Config)).toThrow(
-      "Unsupported connection string scheme: cassandra"
+      'Unsupported connection string scheme: cassandra'
     );
   });
 

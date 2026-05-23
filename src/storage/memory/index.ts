@@ -18,7 +18,8 @@ import { customMethods } from './custom';
 import { serverMethods } from './server';
 
 // Apply all mixin methods to the prototype
-Object.assign(InMemoryStorage.prototype,
+Object.assign(
+  InMemoryStorage.prototype,
   hashMethods,
   listMethods,
   setMethods,
@@ -30,7 +31,7 @@ Object.assign(InMemoryStorage.prototype,
   streamMethods,
   sortMethods,
   customMethods,
-  serverMethods,
+  serverMethods
 );
 
 // TypeScript declaration merging: InMemoryStorage implements IStorage.

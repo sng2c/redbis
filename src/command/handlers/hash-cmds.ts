@@ -143,7 +143,7 @@ async function handleHmget(ctx: HandlerContext, args: string[]): Promise<string>
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.hmget(key, fields);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -263,7 +263,7 @@ async function handleHgetdel(ctx: HandlerContext, args: string[]): Promise<strin
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.hgetdel(key, fields);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -278,7 +278,14 @@ async function handleHgetex(ctx: HandlerContext, args: string[]): Promise<string
 
   for (let i = 1; i < args.length; i++) {
     const upper = args[i].toUpperCase();
-    if (parsingFields && (upper === 'EX' || upper === 'PX' || upper === 'EXAT' || upper === 'PXAT' || upper === 'PERSIST')) {
+    if (
+      parsingFields &&
+      (upper === 'EX' ||
+        upper === 'PX' ||
+        upper === 'EXAT' ||
+        upper === 'PXAT' ||
+        upper === 'PERSIST')
+    ) {
       parsingFields = false;
     }
     if (parsingFields) {
@@ -327,11 +334,14 @@ async function handleHgetex(ctx: HandlerContext, args: string[]): Promise<string
     return encodeError("wrong number of arguments for 'HGETEX' command");
   }
 
-  const hasOpts = options.ex !== undefined || options.px !== undefined ||
-                  options.exat !== undefined || options.pxat !== undefined ||
-                  options.persist !== undefined;
+  const hasOpts =
+    options.ex !== undefined ||
+    options.px !== undefined ||
+    options.exat !== undefined ||
+    options.pxat !== undefined ||
+    options.persist !== undefined;
   const result = await ctx.storage.hgetex(key, fields, hasOpts ? options : undefined);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -402,9 +412,12 @@ async function handleHsetex(ctx: HandlerContext, args: string[]): Promise<string
     pairs.push({ field: args[j], value: args[j + 1] });
   }
 
-  const hasOptions = options.ex !== undefined || options.px !== undefined ||
-                     options.exat !== undefined || options.pxat !== undefined ||
-                     options.keepttl !== undefined;
+  const hasOptions =
+    options.ex !== undefined ||
+    options.px !== undefined ||
+    options.exat !== undefined ||
+    options.pxat !== undefined ||
+    options.keepttl !== undefined;
   const result = await ctx.storage.hsetex(key, pairs, hasOptions ? options : undefined);
   return encodeInteger(result);
 }
@@ -426,7 +439,7 @@ async function handleHexpire(ctx: HandlerContext, args: string[]): Promise<strin
     return encodeError("wrong number of arguments for 'HEXPIRE' command");
   }
   const result = await ctx.storage.hexpire(key, fields, seconds);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHexpireat(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -446,7 +459,7 @@ async function handleHexpireat(ctx: HandlerContext, args: string[]): Promise<str
     return encodeError("wrong number of arguments for 'HEXPIREAT' command");
   }
   const result = await ctx.storage.hexpireat(key, fields, timestamp);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHpexpire(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -466,7 +479,7 @@ async function handleHpexpire(ctx: HandlerContext, args: string[]): Promise<stri
     return encodeError("wrong number of arguments for 'HPEXPIRE' command");
   }
   const result = await ctx.storage.hpexpire(key, fields, milliseconds);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHpexpireat(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -486,7 +499,7 @@ async function handleHpexpireat(ctx: HandlerContext, args: string[]): Promise<st
     return encodeError("wrong number of arguments for 'HPEXPIREAT' command");
   }
   const result = await ctx.storage.hpexpireat(key, fields, msTimestamp);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHexpiretime(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -496,7 +509,7 @@ async function handleHexpiretime(ctx: HandlerContext, args: string[]): Promise<s
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.hexpiretime(key, fields);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHpexpiretime(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -506,7 +519,7 @@ async function handleHpexpiretime(ctx: HandlerContext, args: string[]): Promise<
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.hpexpiretime(key, fields);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHpersist(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -516,7 +529,7 @@ async function handleHpersist(ctx: HandlerContext, args: string[]): Promise<stri
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.hpersist(key, fields);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHttl(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -526,7 +539,7 @@ async function handleHttl(ctx: HandlerContext, args: string[]): Promise<string> 
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.httl(key, fields);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }
 
 async function handleHpttl(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -536,5 +549,5 @@ async function handleHpttl(ctx: HandlerContext, args: string[]): Promise<string>
   const key = args[0];
   const fields = args.slice(1);
   const result = await ctx.storage.hpttl(key, fields);
-  return `*${result.length}\r\n${result.map(r => encodeInteger(r)).join('')}`;
+  return `*${result.length}\r\n${result.map((r) => encodeInteger(r)).join('')}`;
 }

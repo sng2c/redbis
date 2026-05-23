@@ -25,15 +25,23 @@ async function handleGeoadd(ctx: HandlerContext, args: string[]): Promise<string
     return encodeError("wrong number of arguments for 'GEOADD' command");
   }
   const key = args[0];
-  let nx = false, xx = false, ch = false;
+  let nx = false,
+    xx = false,
+    ch = false;
   let i = 1;
   // Parse optional flags
   while (i < args.length) {
     const opt = args[i].toUpperCase();
-    if (opt === 'NX') { nx = true; i++; }
-    else if (opt === 'XX') { xx = true; i++; }
-    else if (opt === 'CH') { ch = true; i++; }
-    else break;
+    if (opt === 'NX') {
+      nx = true;
+      i++;
+    } else if (opt === 'XX') {
+      xx = true;
+      i++;
+    } else if (opt === 'CH') {
+      ch = true;
+      i++;
+    } else break;
   }
   // Remaining args: longitude latitude member triplets
   const remaining = args.length - i;
@@ -70,7 +78,7 @@ async function handleGeohash(ctx: HandlerContext, args: string[]): Promise<strin
   const key = args[0];
   const members = args.slice(1);
   const result = await ctx.storage.geohash(key, members);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -81,7 +89,7 @@ async function handleGeopos(ctx: HandlerContext, args: string[]): Promise<string
   const key = args[0];
   const members = args.slice(1);
   const result = await ctx.storage.geopos(key, members);
-  const parts = result.map(r => {
+  const parts = result.map((r) => {
     if (r === null) return encodeBulkString(null);
     // Each element is [longitude, latitude]
     return `*2\r\n${encodeBulkString(String(r[0]))}${encodeBulkString(String(r[1]))}`;
@@ -128,33 +136,49 @@ async function handleGeoradius(ctx: HandlerContext, args: string[]): Promise<str
   } else {
     return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
   }
-  let withCoord = false, withDist = false, withHash = false;
+  let withCoord = false,
+    withDist = false,
+    withHash = false;
   let count: number | undefined;
   let sort: 'ASC' | 'DESC' | undefined;
   let store: string | undefined;
   let storeDist: string | undefined;
   for (let i = 5; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'WITHCOORD') { withCoord = true; }
-    else if (opt === 'WITHDIST') { withDist = true; }
-    else if (opt === 'WITHASH') { withHash = true; }
-    else if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    if (opt === 'WITHCOORD') {
+      withCoord = true;
+    } else if (opt === 'WITHDIST') {
+      withDist = true;
+    } else if (opt === 'WITHASH') {
+      withHash = true;
+    } else if (opt === 'COUNT') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
-    }
-    else if (opt === 'ASC') { sort = 'ASC'; }
-    else if (opt === 'DESC') { sort = 'DESC'; }
-    else if (opt === 'STORE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    } else if (opt === 'ASC') {
+      sort = 'ASC';
+    } else if (opt === 'DESC') {
+      sort = 'DESC';
+    } else if (opt === 'STORE') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       store = args[i];
-    }
-    else if (opt === 'STOREDIST') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    } else if (opt === 'STOREDIST') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       storeDist = args[i];
     }
   }
-  const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string } = {};
+  const options: {
+    withCoord?: boolean;
+    withDist?: boolean;
+    withHash?: boolean;
+    count?: number;
+    sort?: 'ASC' | 'DESC';
+    store?: string;
+    storeDist?: string;
+  } = {};
   if (withCoord) options.withCoord = true;
   if (withDist) options.withDist = true;
   if (withHash) options.withHash = true;
@@ -169,15 +193,17 @@ async function handleGeoradius(ctx: HandlerContext, args: string[]): Promise<str
   }
   if (!withCoord && !withDist && !withHash) {
     // Just member names
-    return encodeArray(result.map(r => r.member));
+    return encodeArray(result.map((r) => r.member));
   }
   // Array of arrays
-  const parts = result.map(r => {
+  const parts = result.map((r) => {
     const items: string[] = [encodeBulkString(r.member)];
     if (withDist) items.push(encodeBulkString(String(r.distance)));
     if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
     if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
-      items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      items.push(
+        `*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`
+      );
     }
     return `*${items.length}\r\n${items.join('')}`;
   });
@@ -201,33 +227,49 @@ async function handleGeoradiusbymember(ctx: HandlerContext, args: string[]): Pro
   } else {
     return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
   }
-  let withCoord = false, withDist = false, withHash = false;
+  let withCoord = false,
+    withDist = false,
+    withHash = false;
   let count: number | undefined;
   let sort: 'ASC' | 'DESC' | undefined;
   let store: string | undefined;
   let storeDist: string | undefined;
   for (let i = 4; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'WITHCOORD') { withCoord = true; }
-    else if (opt === 'WITHDIST') { withDist = true; }
-    else if (opt === 'WITHASH') { withHash = true; }
-    else if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    if (opt === 'WITHCOORD') {
+      withCoord = true;
+    } else if (opt === 'WITHDIST') {
+      withDist = true;
+    } else if (opt === 'WITHASH') {
+      withHash = true;
+    } else if (opt === 'COUNT') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
-    }
-    else if (opt === 'ASC') { sort = 'ASC'; }
-    else if (opt === 'DESC') { sort = 'DESC'; }
-    else if (opt === 'STORE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    } else if (opt === 'ASC') {
+      sort = 'ASC';
+    } else if (opt === 'DESC') {
+      sort = 'DESC';
+    } else if (opt === 'STORE') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       store = args[i];
-    }
-    else if (opt === 'STOREDIST') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    } else if (opt === 'STOREDIST') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       storeDist = args[i];
     }
   }
-  const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string } = {};
+  const options: {
+    withCoord?: boolean;
+    withDist?: boolean;
+    withHash?: boolean;
+    count?: number;
+    sort?: 'ASC' | 'DESC';
+    store?: string;
+    storeDist?: string;
+  } = {};
   if (withCoord) options.withCoord = true;
   if (withDist) options.withDist = true;
   if (withHash) options.withHash = true;
@@ -240,14 +282,16 @@ async function handleGeoradiusbymember(ctx: HandlerContext, args: string[]): Pro
     return encodeInteger(result.length);
   }
   if (!withCoord && !withDist && !withHash) {
-    return encodeArray(result.map(r => r.member));
+    return encodeArray(result.map((r) => r.member));
   }
-  const parts = result.map(r => {
+  const parts = result.map((r) => {
     const items: string[] = [encodeBulkString(r.member)];
     if (withDist) items.push(encodeBulkString(String(r.distance)));
     if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
     if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
-      items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      items.push(
+        `*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`
+      );
     }
     return `*${items.length}\r\n${items.join('')}`;
   });
@@ -267,61 +311,102 @@ async function handleGeosearch(ctx: HandlerContext, args: string[]): Promise<str
   let sort: 'ASC' | 'DESC' | undefined;
   let count: number | undefined;
   let any: boolean | undefined;
-  let withCoord = false, withDist = false, withHash = false;
+  let withCoord = false,
+    withDist = false,
+    withHash = false;
 
   let i = 1;
   while (i < args.length) {
     const opt = args[i].toUpperCase();
     if (opt === 'FROMMEMBER') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
-      fromMember = args[i]; i++;
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
+      fromMember = args[i];
+      i++;
     } else if (opt === 'FROMLONGITUDE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       fromLongitude = parseFloat(args[i]);
       if (isNaN(fromLongitude)) return encodeError('ERR value is not a valid float');
       i++;
     } else if (opt === 'FROMLATITUDE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       fromLatitude = parseFloat(args[i]);
       if (isNaN(fromLatitude)) return encodeError('ERR value is not a valid float');
       i++;
     } else if (opt === 'BYRADIUS') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const radius = parseFloat(args[i]);
       if (isNaN(radius)) return encodeError('ERR value is not a valid float');
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const unitArg = args[i].toLowerCase();
-      if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+      if (!['m', 'km', 'ft', 'mi'].includes(unitArg))
+        return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
       byRadius = { radius, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
       i++;
     } else if (opt === 'BYBOX') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const width = parseFloat(args[i]);
       if (isNaN(width)) return encodeError('ERR value is not a valid float');
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const height = parseFloat(args[i]);
       if (isNaN(height)) return encodeError('ERR value is not a valid float');
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const unitArg = args[i].toLowerCase();
-      if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+      if (!['m', 'km', 'ft', 'mi'].includes(unitArg))
+        return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
       byBox = { width, height, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
       i++;
-    } else if (opt === 'ASC') { sort = 'ASC'; i++; }
-    else if (opt === 'DESC') { sort = 'DESC'; i++; }
-    else if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    } else if (opt === 'ASC') {
+      sort = 'ASC';
+      i++;
+    } else if (opt === 'DESC') {
+      sort = 'DESC';
+      i++;
+    } else if (opt === 'COUNT') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
       i++;
       // Check for ANY flag
-      if (i < args.length && args[i].toUpperCase() === 'ANY') { any = true; i++; }
-    } else if (opt === 'WITHCOORD') { withCoord = true; i++; }
-    else if (opt === 'WITHDIST') { withDist = true; i++; }
-    else if (opt === 'WITHASH') { withHash = true; i++; }
-    else { return encodeError('ERR syntax error'); }
+      if (i < args.length && args[i].toUpperCase() === 'ANY') {
+        any = true;
+        i++;
+      }
+    } else if (opt === 'WITHCOORD') {
+      withCoord = true;
+      i++;
+    } else if (opt === 'WITHDIST') {
+      withDist = true;
+      i++;
+    } else if (opt === 'WITHASH') {
+      withHash = true;
+      i++;
+    } else {
+      return encodeError('ERR syntax error');
+    }
   }
 
-  const options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean } = {};
+  const options: {
+    fromMember?: string;
+    fromLongitude?: number;
+    fromLatitude?: number;
+    byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+    byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+    sort?: 'ASC' | 'DESC';
+    count?: number;
+    any?: boolean;
+    withCoord?: boolean;
+    withDist?: boolean;
+    withHash?: boolean;
+  } = {};
   if (fromMember !== undefined) options.fromMember = fromMember;
   if (fromLongitude !== undefined) options.fromLongitude = fromLongitude;
   if (fromLatitude !== undefined) options.fromLatitude = fromLatitude;
@@ -336,14 +421,16 @@ async function handleGeosearch(ctx: HandlerContext, args: string[]): Promise<str
 
   const result = await ctx.storage.geosearch(key, options);
   if (!withCoord && !withDist && !withHash) {
-    return encodeArray(result.map(r => r.member));
+    return encodeArray(result.map((r) => r.member));
   }
-  const parts = result.map(r => {
+  const parts = result.map((r) => {
     const items: string[] = [encodeBulkString(r.member)];
     if (withDist) items.push(encodeBulkString(String(r.distance)));
     if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
     if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
-      items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      items.push(
+        `*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`
+      );
     }
     return `*${items.length}\r\n${items.join('')}`;
   });
@@ -370,52 +457,85 @@ async function handleGeosearchstore(ctx: HandlerContext, args: string[]): Promis
   while (i < args.length) {
     const opt = args[i].toUpperCase();
     if (opt === 'FROMMEMBER') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
-      fromMember = args[i]; i++;
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
+      fromMember = args[i];
+      i++;
     } else if (opt === 'FROMLONGITUDE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       fromLongitude = parseFloat(args[i]);
       if (isNaN(fromLongitude)) return encodeError('ERR value is not a valid float');
       i++;
     } else if (opt === 'FROMLATITUDE') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       fromLatitude = parseFloat(args[i]);
       if (isNaN(fromLatitude)) return encodeError('ERR value is not a valid float');
       i++;
     } else if (opt === 'BYRADIUS') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const radius = parseFloat(args[i]);
       if (isNaN(radius)) return encodeError('ERR value is not a valid float');
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const unitArg = args[i].toLowerCase();
-      if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+      if (!['m', 'km', 'ft', 'mi'].includes(unitArg))
+        return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
       byRadius = { radius, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
       i++;
     } else if (opt === 'BYBOX') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const width = parseFloat(args[i]);
       if (isNaN(width)) return encodeError('ERR value is not a valid float');
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const height = parseFloat(args[i]);
       if (isNaN(height)) return encodeError('ERR value is not a valid float');
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       const unitArg = args[i].toLowerCase();
-      if (!['m', 'km', 'ft', 'mi'].includes(unitArg)) return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
+      if (!['m', 'km', 'ft', 'mi'].includes(unitArg))
+        return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
       byBox = { width, height, unit: unitArg as 'm' | 'km' | 'ft' | 'mi' };
       i++;
-    } else if (opt === 'ASC') { sort = 'ASC'; i++; }
-    else if (opt === 'DESC') { sort = 'DESC'; i++; }
-    else if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    } else if (opt === 'ASC') {
+      sort = 'ASC';
+      i++;
+    } else if (opt === 'DESC') {
+      sort = 'DESC';
+      i++;
+    } else if (opt === 'COUNT') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
       i++;
-      if (i < args.length && args[i].toUpperCase() === 'ANY') { any = true; i++; }
-    } else if (opt === 'STOREDIST') { storeDist = true; i++; }
-    else { return encodeError('ERR syntax error'); }
+      if (i < args.length && args[i].toUpperCase() === 'ANY') {
+        any = true;
+        i++;
+      }
+    } else if (opt === 'STOREDIST') {
+      storeDist = true;
+      i++;
+    } else {
+      return encodeError('ERR syntax error');
+    }
   }
 
-  const options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean } = {};
+  const options: {
+    fromMember?: string;
+    fromLongitude?: number;
+    fromLatitude?: number;
+    byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+    byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+    sort?: 'ASC' | 'DESC';
+    count?: number;
+    any?: boolean;
+    storeDist?: boolean;
+  } = {};
   if (fromMember !== undefined) options.fromMember = fromMember;
   if (fromLongitude !== undefined) options.fromLongitude = fromLongitude;
   if (fromLatitude !== undefined) options.fromLatitude = fromLatitude;
@@ -449,26 +569,39 @@ async function handleGeoradiusRo(ctx: HandlerContext, args: string[]): Promise<s
   } else {
     return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
   }
-  let withCoord = false, withDist = false, withHash = false;
+  let withCoord = false,
+    withDist = false,
+    withHash = false;
   let count: number | undefined;
   let sort: 'ASC' | 'DESC' | undefined;
   for (let i = 5; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'WITHCOORD') { withCoord = true; }
-    else if (opt === 'WITHDIST') { withDist = true; }
-    else if (opt === 'WITHASH') { withHash = true; }
-    else if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    if (opt === 'WITHCOORD') {
+      withCoord = true;
+    } else if (opt === 'WITHDIST') {
+      withDist = true;
+    } else if (opt === 'WITHASH') {
+      withHash = true;
+    } else if (opt === 'COUNT') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
-    }
-    else if (opt === 'ASC') { sort = 'ASC'; }
-    else if (opt === 'DESC') { sort = 'DESC'; }
-    else if (opt === 'STORE' || opt === 'STOREDIST') {
+    } else if (opt === 'ASC') {
+      sort = 'ASC';
+    } else if (opt === 'DESC') {
+      sort = 'DESC';
+    } else if (opt === 'STORE' || opt === 'STOREDIST') {
       return encodeError(`${opt} option is not allowed on GEORADIUS_RO`);
     }
   }
-  const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC' } = {};
+  const options: {
+    withCoord?: boolean;
+    withDist?: boolean;
+    withHash?: boolean;
+    count?: number;
+    sort?: 'ASC' | 'DESC';
+  } = {};
   if (withCoord) options.withCoord = true;
   if (withDist) options.withDist = true;
   if (withHash) options.withHash = true;
@@ -476,14 +609,16 @@ async function handleGeoradiusRo(ctx: HandlerContext, args: string[]): Promise<s
   if (sort) options.sort = sort;
   const result = await ctx.storage.georadius(key, longitude, latitude, radius, unit, options);
   if (!withCoord && !withDist && !withHash) {
-    return encodeArray(result.map(r => r.member));
+    return encodeArray(result.map((r) => r.member));
   }
-  const parts = result.map(r => {
+  const parts = result.map((r) => {
     const items: string[] = [encodeBulkString(r.member)];
     if (withDist) items.push(encodeBulkString(String(r.distance)));
     if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
     if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
-      items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      items.push(
+        `*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`
+      );
     }
     return `*${items.length}\r\n${items.join('')}`;
   });
@@ -508,26 +643,39 @@ async function handleGeoradiusbymemberRo(ctx: HandlerContext, args: string[]): P
   } else {
     return encodeError('ERR unsupported unit provided. please use m, km, ft, mi');
   }
-  let withCoord = false, withDist = false, withHash = false;
+  let withCoord = false,
+    withDist = false,
+    withHash = false;
   let count: number | undefined;
   let sort: 'ASC' | 'DESC' | undefined;
   for (let i = 4; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'WITHCOORD') { withCoord = true; }
-    else if (opt === 'WITHDIST') { withDist = true; }
-    else if (opt === 'WITHASH') { withHash = true; }
-    else if (opt === 'COUNT') {
-      i++; if (i >= args.length) return encodeError('ERR syntax error');
+    if (opt === 'WITHCOORD') {
+      withCoord = true;
+    } else if (opt === 'WITHDIST') {
+      withDist = true;
+    } else if (opt === 'WITHASH') {
+      withHash = true;
+    } else if (opt === 'COUNT') {
+      i++;
+      if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
-    }
-    else if (opt === 'ASC') { sort = 'ASC'; }
-    else if (opt === 'DESC') { sort = 'DESC'; }
-    else if (opt === 'STORE' || opt === 'STOREDIST') {
+    } else if (opt === 'ASC') {
+      sort = 'ASC';
+    } else if (opt === 'DESC') {
+      sort = 'DESC';
+    } else if (opt === 'STORE' || opt === 'STOREDIST') {
       return encodeError(`${opt} option is not allowed on GEORADIUSBYMEMBER_RO`);
     }
   }
-  const options: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC' } = {};
+  const options: {
+    withCoord?: boolean;
+    withDist?: boolean;
+    withHash?: boolean;
+    count?: number;
+    sort?: 'ASC' | 'DESC';
+  } = {};
   if (withCoord) options.withCoord = true;
   if (withDist) options.withDist = true;
   if (withHash) options.withHash = true;
@@ -535,14 +683,16 @@ async function handleGeoradiusbymemberRo(ctx: HandlerContext, args: string[]): P
   if (sort) options.sort = sort;
   const result = await ctx.storage.georadiusbymember(key, member, radius, unit, options);
   if (!withCoord && !withDist && !withHash) {
-    return encodeArray(result.map(r => r.member));
+    return encodeArray(result.map((r) => r.member));
   }
-  const parts = result.map(r => {
+  const parts = result.map((r) => {
     const items: string[] = [encodeBulkString(r.member)];
     if (withDist) items.push(encodeBulkString(String(r.distance)));
     if (withHash) items.push(encodeInteger(r.geohash ? parseInt(String(r.geohash)) : 0));
     if (withCoord && r.longitude !== undefined && r.latitude !== undefined) {
-      items.push(`*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`);
+      items.push(
+        `*2\r\n${encodeBulkString(String(r.longitude))}${encodeBulkString(String(r.latitude))}`
+      );
     }
     return `*${items.length}\r\n${items.join('')}`;
   });

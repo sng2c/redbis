@@ -60,20 +60,29 @@ function handleConfig(_ctx: HandlerContext, args: string[]): string {
       if (args.length < 2) return encodeArray(null);
       const param = args[1].toLowerCase();
       switch (param) {
-        case 'save': return `*2\r\n${encodeBulkString('save')}${encodeBulkString('60 1000')}`;
-        case 'appendonly': return `*2\r\n${encodeBulkString('appendonly')}${encodeBulkString('no')}`;
-        case 'dbfilename': return `*2\r\n${encodeBulkString('dbfilename')}${encodeBulkString('dump.rdb')}`;
-        case 'dir': return `*2\r\n${encodeBulkString('dir')}${encodeBulkString('./')}`;
-        default: return encodeArray([]);
+        case 'save':
+          return `*2\r\n${encodeBulkString('save')}${encodeBulkString('60 1000')}`;
+        case 'appendonly':
+          return `*2\r\n${encodeBulkString('appendonly')}${encodeBulkString('no')}`;
+        case 'dbfilename':
+          return `*2\r\n${encodeBulkString('dbfilename')}${encodeBulkString('dump.rdb')}`;
+        case 'dir':
+          return `*2\r\n${encodeBulkString('dir')}${encodeBulkString('./')}`;
+        default:
+          return encodeArray([]);
       }
     }
     case 'SET': {
       if (args.length < 3) return encodeError("wrong number of arguments for 'CONFIG SET' command");
       const param = args[1].toLowerCase();
       switch (param) {
-        case 'save': return encodeError('CONFIG SET failed');
-        case 'appendonly': case 'dbfilename': return encodeSimpleString('OK');
-        default: return encodeSimpleString('OK');
+        case 'save':
+          return encodeError('CONFIG SET failed');
+        case 'appendonly':
+        case 'dbfilename':
+          return encodeSimpleString('OK');
+        default:
+          return encodeSimpleString('OK');
       }
     }
     case 'RESETSTAT':
@@ -97,17 +106,23 @@ function handleSlowlog(_ctx: HandlerContext, args: string[]): string {
         if (!isNaN(c)) count = c;
       }
       const entries = slowLog.slice(-count);
-      const results: string[] = entries.map(e =>
-        encodeRawArray([encodeInteger(e.timestamp), encodeInteger(e.duration), encodeArray(e.command)])
+      const results: string[] = entries.map((e) =>
+        encodeRawArray([
+          encodeInteger(e.timestamp),
+          encodeInteger(e.duration),
+          encodeArray(e.command),
+        ])
       );
       return encodeRawArray(results);
     }
-    case 'LEN': return encodeInteger(slowLog.length);
+    case 'LEN':
+      return encodeInteger(slowLog.length);
     case 'RESET': {
       slowLog.length = 0;
       return encodeSimpleString('OK');
     }
-    default: return encodeError('unknown subcommand');
+    default:
+      return encodeError('unknown subcommand');
   }
 }
 
@@ -116,7 +131,8 @@ async function handleMemory(ctx: HandlerContext, args: string[]): Promise<string
   const sub = args[0].toUpperCase();
   switch (sub) {
     case 'USAGE': {
-      if (args.length < 2) return encodeError("wrong number of arguments for 'memory|usage' command");
+      if (args.length < 2)
+        return encodeError("wrong number of arguments for 'memory|usage' command");
       const key = args[1];
       const value = await ctx.storage.get(key);
       if (value === null) return encodeInteger(-1);
@@ -135,13 +151,20 @@ function handleAuth(_ctx: HandlerContext, args: string[]): string {
 
 function handleHello(ctx: HandlerContext, _args: string[]): string {
   return encodeArray([
-    'server', 'redbis',
-    'version', '1.0.0',
-    'proto', '2',
-    'id', ctx.connId,
-    'mode', 'standalone',
-    'role', 'master',
-    'databases', '1',
+    'server',
+    'redbis',
+    'version',
+    '1.0.0',
+    'proto',
+    '2',
+    'id',
+    ctx.connId,
+    'mode',
+    'standalone',
+    'role',
+    'master',
+    'databases',
+    '1',
   ]);
 }
 
@@ -154,7 +177,8 @@ function handleClient(ctx: HandlerContext, args: string[]): string {
   const sub = args[0].toUpperCase();
   switch (sub) {
     case 'SETNAME':
-      if (args.length < 2) return encodeError("wrong number of arguments for 'CLIENT|SETNAME' command");
+      if (args.length < 2)
+        return encodeError("wrong number of arguments for 'CLIENT|SETNAME' command");
       ctx.clientName = args[1];
       return encodeSimpleString('OK');
     case 'GETNAME':
@@ -167,9 +191,13 @@ function handleClient(ctx: HandlerContext, args: string[]): string {
     case 'KILL':
       return encodeSimpleString('OK');
     case 'LIST':
-      return encodeBulkString(`id=${ctx.connId} fd=-1 name=${ctx.clientName} age=0 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=client`);
+      return encodeBulkString(
+        `id=${ctx.connId} fd=-1 name=${ctx.clientName} age=0 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 obl=0 oll=0 omem=0 events=r cmd=client`
+      );
     case 'INFO':
-      return encodeBulkString(`id=${ctx.connId} fd=-1 name=${ctx.clientName} age=0 idle=0 flags=N db=0`);
+      return encodeBulkString(
+        `id=${ctx.connId} fd=-1 name=${ctx.clientName} age=0 idle=0 flags=N db=0`
+      );
     case 'PAUSE':
       return encodeSimpleString('OK');
     case 'UNPAUSE':

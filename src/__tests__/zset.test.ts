@@ -540,7 +540,16 @@ describe('정렬 세트(Sorted Set) 명령어 — InMemoryStorage', () => {
     it('ZUNION WEIGHTS', async () => {
       await handler.execute(['ZADD', 'z1', '1', 'a']);
       await handler.execute(['ZADD', 'z2', '1', 'a']);
-      const result = await handler.execute(['ZUNION', '2', 'z1', 'z2', 'WEIGHTS', '2', '3', 'WITHSCORES']);
+      const result = await handler.execute([
+        'ZUNION',
+        '2',
+        'z1',
+        'z2',
+        'WEIGHTS',
+        '2',
+        '3',
+        'WITHSCORES',
+      ]);
       // score = 1*2 + 1*3 = 5
       expect(result).toContain('5');
     });
@@ -548,14 +557,30 @@ describe('정렬 세트(Sorted Set) 명령어 — InMemoryStorage', () => {
     it('ZUNION AGGREGATE MIN', async () => {
       await handler.execute(['ZADD', 'z1', '5', 'a']);
       await handler.execute(['ZADD', 'z2', '3', 'a']);
-      const result = await handler.execute(['ZUNION', '2', 'z1', 'z2', 'AGGREGATE', 'MIN', 'WITHSCORES']);
+      const result = await handler.execute([
+        'ZUNION',
+        '2',
+        'z1',
+        'z2',
+        'AGGREGATE',
+        'MIN',
+        'WITHSCORES',
+      ]);
       expect(result).toContain('3');
     });
 
     it('ZUNION AGGREGATE MAX', async () => {
       await handler.execute(['ZADD', 'z1', '5', 'a']);
       await handler.execute(['ZADD', 'z2', '3', 'a']);
-      const result = await handler.execute(['ZUNION', '2', 'z1', 'z2', 'AGGREGATE', 'MAX', 'WITHSCORES']);
+      const result = await handler.execute([
+        'ZUNION',
+        '2',
+        'z1',
+        'z2',
+        'AGGREGATE',
+        'MAX',
+        'WITHSCORES',
+      ]);
       expect(result).toContain('5');
     });
 
@@ -588,14 +613,31 @@ describe('정렬 세트(Sorted Set) 명령어 — InMemoryStorage', () => {
     it('ZINTER WEIGHTS', async () => {
       await handler.execute(['ZADD', 'z1', '1', 'a']);
       await handler.execute(['ZADD', 'z2', '1', 'a']);
-      const result = await handler.execute(['ZINTER', '2', 'z1', 'z2', 'WEIGHTS', '2', '3', 'WITHSCORES']);
+      const result = await handler.execute([
+        'ZINTER',
+        '2',
+        'z1',
+        'z2',
+        'WEIGHTS',
+        '2',
+        '3',
+        'WITHSCORES',
+      ]);
       expect(result).toContain('5'); // 1*2 + 1*3
     });
 
     it('ZINTER AGGREGATE MIN', async () => {
       await handler.execute(['ZADD', 'z1', '5', 'a']);
       await handler.execute(['ZADD', 'z2', '3', 'a']);
-      const result = await handler.execute(['ZINTER', '2', 'z1', 'z2', 'AGGREGATE', 'MIN', 'WITHSCORES']);
+      const result = await handler.execute([
+        'ZINTER',
+        '2',
+        'z1',
+        'z2',
+        'AGGREGATE',
+        'MIN',
+        'WITHSCORES',
+      ]);
       expect(result).toContain('3');
     });
 

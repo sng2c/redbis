@@ -2,7 +2,10 @@
 import type { SqliteStorage } from './core';
 
 export const customMethods = {
-async delex(key: string, conditions: Array<{ operator: string; value: string }>): Promise<number> {
+  async delex(
+    key: string,
+    conditions: Array<{ operator: string; value: string }>
+  ): Promise<number> {
     this.evictExpired(key);
     if (conditions.length === 0) {
       return (await this.delete(key)) ? 1 : 0;
@@ -49,11 +52,10 @@ async delex(key: string, conditions: Array<{ operator: string; value: string }>)
     return (await this.delete(key)) ? 1 : 0;
   },
 
-async msetex(pairs: Array<{ key: string; seconds: number; value: string }>): Promise<number> {
+  async msetex(pairs: Array<{ key: string; seconds: number; value: string }>): Promise<number> {
     for (const { key, seconds, value } of pairs) {
       await this.setex(key, seconds, value);
     }
     return pairs.length;
   },
-
 };

@@ -3,15 +3,15 @@ import type { InMemoryStorage } from './core';
 import { formatMemoryHuman } from './types';
 
 export const serverMethods = {
-async save(): Promise<void> {
+  async save(): Promise<void> {
     // No-op for in-memory storage
   },
 
-async bgsave(): Promise<string> {
+  async bgsave(): Promise<string> {
     return 'OK';
   },
 
-async info(section?: string): Promise<string> {
+  async info(section?: string): Promise<string> {
     const sections: Record<string, string> = {};
 
     // Server section
@@ -22,12 +22,12 @@ async info(section?: string): Promise<string> {
       'redis_mode:standalone\r\n' +
       'os:Linux\r\n' +
       'tcp_port:6379\r\n' +
-      'uptime_in_seconds:' + uptime + '\r\n';
+      'uptime_in_seconds:' +
+      uptime +
+      '\r\n';
 
     // Clients section
-    sections['clients'] =
-      '# Clients\r\n' +
-      'connected_clients:0\r\n';
+    sections['clients'] = '# Clients\r\n' + 'connected_clients:0\r\n';
 
     // Memory section — estimate total bytes of all stored data
     let usedMemory = 0;
@@ -61,29 +61,33 @@ async info(section?: string): Promise<string> {
     const usedMemoryHuman = formatMemoryHuman(usedMemory);
     sections['memory'] =
       '# Memory\r\n' +
-      'used_memory:' + usedMemory + '\r\n' +
-      'used_memory_human:' + usedMemoryHuman + '\r\n';
+      'used_memory:' +
+      usedMemory +
+      '\r\n' +
+      'used_memory_human:' +
+      usedMemoryHuman +
+      '\r\n';
 
     // Persistence section
-    sections['persistence'] =
-      '# Persistence\r\n' +
-      'loading:0\r\n' +
-      'rdb_last_save_time:0\r\n';
+    sections['persistence'] = '# Persistence\r\n' + 'loading:0\r\n' + 'rdb_last_save_time:0\r\n';
 
     // Keyspace section
-    sections['keyspace'] =
-      '# Keyspace\r\n' +
-      'db0:keys=' + this.store.size + ',expires=0\r\n';
+    sections['keyspace'] = '# Keyspace\r\n' + 'db0:keys=' + this.store.size + ',expires=0\r\n';
 
     if (section && section !== 'all') {
       return sections[section] ?? '';
     }
     // Return all sections
-    return sections['server'] + sections['clients'] + sections['memory'] + sections['persistence'] + sections['keyspace'];
+    return (
+      sections['server'] +
+      sections['clients'] +
+      sections['memory'] +
+      sections['persistence'] +
+      sections['keyspace']
+    );
   },
 
-async getLastSaveTime(): Promise<number> {
+  async getLastSaveTime(): Promise<number> {
     return 0;
   },
-
 };

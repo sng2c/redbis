@@ -22,7 +22,8 @@ async function handleSetbit(ctx: HandlerContext, args: string[]): Promise<string
   const key = args[0];
   const offset = parseInt(args[1]);
   const value = parseInt(args[2]);
-  if (isNaN(offset) || offset < 0) return encodeError('ERR bit offset is not an integer or out of range');
+  if (isNaN(offset) || offset < 0)
+    return encodeError('ERR bit offset is not an integer or out of range');
   if (value !== 0 && value !== 1) return encodeError('ERR bit is not an integer or out of range');
   const result = await ctx.storage.setbit(key, offset, value as 0 | 1);
   return encodeInteger(result);
@@ -31,7 +32,8 @@ async function handleSetbit(ctx: HandlerContext, args: string[]): Promise<string
 async function handleGetbit(ctx: HandlerContext, args: string[]): Promise<string> {
   if (args.length !== 2) return encodeError("wrong number of arguments for 'GETBIT' command");
   const offset = parseInt(args[1]);
-  if (isNaN(offset) || offset < 0) return encodeError('ERR bit offset is not an integer or out of range');
+  if (isNaN(offset) || offset < 0)
+    return encodeError('ERR bit offset is not an integer or out of range');
   const result = await ctx.storage.getbit(args[0], offset);
   return encodeInteger(result);
 }
@@ -76,7 +78,8 @@ async function handleBitop(ctx: HandlerContext, args: string[]): Promise<string>
   if (!['AND', 'OR', 'XOR', 'NOT'].includes(operation)) return encodeError('ERR syntax error');
   const destkey = args[1];
   const keys = args.slice(2);
-  if (operation === 'NOT' && keys.length !== 1) return encodeError('ERR BITOP NOT requires exactly one source key');
+  if (operation === 'NOT' && keys.length !== 1)
+    return encodeError('ERR BITOP NOT requires exactly one source key');
   const result = await ctx.storage.bitop(operation, destkey, keys);
   return encodeInteger(result);
 }
@@ -84,7 +87,13 @@ async function handleBitop(ctx: HandlerContext, args: string[]): Promise<string>
 async function handleBitfield(ctx: HandlerContext, args: string[]): Promise<string> {
   if (args.length < 2) return encodeError("wrong number of arguments for 'BITFIELD' command");
   const key = args[0];
-  const operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }> = [];
+  const operations: Array<{
+    type: 'GET' | 'SET' | 'INCRBY';
+    encoding: string;
+    offset: number;
+    value?: number;
+    overflow?: 'WRAP' | 'SAT' | 'FAIL';
+  }> = [];
   let currentOverflow: 'WRAP' | 'SAT' | 'FAIL' = 'WRAP';
   let i = 1;
   while (i < args.length) {
@@ -134,14 +143,20 @@ async function handleBitfield(ctx: HandlerContext, args: string[]): Promise<stri
       if (i >= args.length) return encodeError('ERR syntax error');
       const increment = parseInt(args[i]);
       if (isNaN(increment)) return encodeError('ERR value is not an integer or out of range');
-      operations.push({ type: 'INCRBY', encoding, offset, value: increment, overflow: currentOverflow });
+      operations.push({
+        type: 'INCRBY',
+        encoding,
+        offset,
+        value: increment,
+        overflow: currentOverflow,
+      });
       i++;
     } else {
       return encodeError('ERR syntax error');
     }
   }
   const result = await ctx.storage.bitfield(key, operations);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeInteger(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -167,6 +182,6 @@ async function handleBitfieldRo(ctx: HandlerContext, args: string[]): Promise<st
     }
   }
   const result = await ctx.storage.bitfieldRo(key, operations);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeInteger(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }

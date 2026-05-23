@@ -6,25 +6,25 @@ const HLL_REGISTERS = 16384;
 const HLL_BYTES = 12288;
 
 export const hllMethods = {
-_ensureHllTypeOrThrow(key: string): void {
+  _ensureHllTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'hyperloglog');
   },
 
-_murmurHash64(str: string): bigint {
+  _murmurHash64(str: string): bigint {
     let h1 = 0x9e3779b97f4a7c15n;
     for (let i = 0; i < str.length; i++) {
       h1 ^= BigInt(str.charCodeAt(i));
-      h1 = (h1 * 0xbf58476d1ce4e5b9n) & 0xFFFFFFFFFFFFFFFFn;
-      h1 = ((h1 ^ (h1 >> 31n)) & 0xFFFFFFFFFFFFFFFFn);
+      h1 = (h1 * 0xbf58476d1ce4e5b9n) & 0xffffffffffffffffn;
+      h1 = (h1 ^ (h1 >> 31n)) & 0xffffffffffffffffn;
     }
     return h1;
   },
 
-_hllIndex(hash: bigint): number {
-    return Number(hash & 0x3FFFn);
+  _hllIndex(hash: bigint): number {
+    return Number(hash & 0x3fffn);
   },
 
-_hllRho(hash: bigint): number {
+  _hllRho(hash: bigint): number {
     const remaining = hash >> 14n;
     if (remaining === 0n) return 51;
     let count = 1;
@@ -36,15 +36,15 @@ _hllRho(hash: bigint): number {
     return count;
   },
 
-_hllEncode(registers: Uint8Array): string {
+  _hllEncode(registers: Uint8Array): string {
     return Buffer.from(registers).toString('base64');
   },
 
-_hllDecode(data: string): Uint8Array {
+  _hllDecode(data: string): Uint8Array {
     return new Uint8Array(Buffer.from(data, 'base64'));
   },
 
-_read6BitRegister(data: Uint8Array, index: number): number {
+  _read6BitRegister(data: Uint8Array, index: number): number {
     const bitOffset = index * 6;
     const byteOffset = Math.floor(bitOffset / 8);
     const bitInByte = bitOffset % 8;
@@ -68,7 +68,7 @@ _read6BitRegister(data: Uint8Array, index: number): number {
     return value;
   },
 
-_write6BitRegister(data: Uint8Array, index: number, value: number): void {
+  _write6BitRegister(data: Uint8Array, index: number, value: number): void {
     const bitOffset = index * 6;
     const byteOffset = Math.floor(bitOffset / 8);
     const bitInByte = bitOffset % 8;
@@ -81,12 +81,12 @@ _write6BitRegister(data: Uint8Array, index: number, value: number): void {
     while (bitsToWrite > 0) {
       const bitsAvailable = 8 - currentBit;
       const bitsToWriteNow = Math.min(bitsAvailable, bitsToWrite);
-      const mask = ((1 << bitsToWriteNow) - 1);
+      const mask = (1 << bitsToWriteNow) - 1;
       const bits = (shiftedValue >> (bitsToWrite - bitsToWriteNow)) & mask;
       const shift = bitsAvailable - bitsToWriteNow;
 
       data[currentByte] &= ~(mask << shift);
-      data[currentByte] |= (bits << shift);
+      data[currentByte] |= bits << shift;
 
       bitsToWrite -= bitsToWriteNow;
       currentBit = 0;
@@ -94,7 +94,7 @@ _write6BitRegister(data: Uint8Array, index: number, value: number): void {
     }
   },
 
-_hllEstimate(registers: Uint8Array): number {
+  _hllEstimate(registers: Uint8Array): number {
     const m = HLL_REGISTERS;
     let sum = 0;
     let zeros = 0;
@@ -106,7 +106,7 @@ _hllEstimate(registers: Uint8Array): number {
     }
 
     const alpha = 0.7213 / (1 + 1.079 / m);
-    const estimate = alpha * m * m / sum;
+    const estimate = (alpha * m * m) / sum;
 
     if (estimate <= 2.5 * m && zeros > 0) {
       return Math.round(m * Math.log(m / zeros));
@@ -115,7 +115,7 @@ _hllEstimate(registers: Uint8Array): number {
     return Math.max(0, Math.round(estimate));
   },
 
-async pfadd(key: string, elements: string[]): Promise<number> {
+  async pfadd(key: string, elements: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureHllTypeOrThrow(key);
     let entry = this.store.get(key);
@@ -123,7 +123,11 @@ async pfadd(key: string, elements: string[]): Promise<number> {
 
     if (!entry) {
       registers = new Uint8Array(HLL_BYTES);
-      this.store.set(key, { value: this._hllEncode(registers), type: 'hyperloglog', expiresAt: null });
+      this.store.set(key, {
+        value: this._hllEncode(registers),
+        type: 'hyperloglog',
+        expiresAt: null,
+      });
       entry = this.store.get(key)!;
     } else {
       registers = this._hllDecode(entry.value);
@@ -142,12 +146,16 @@ async pfadd(key: string, elements: string[]): Promise<number> {
     }
 
     if (changed) {
-      this.store.set(key, { value: this._hllEncode(registers), type: 'hyperloglog', expiresAt: entry.expiresAt });
+      this.store.set(key, {
+        value: this._hllEncode(registers),
+        type: 'hyperloglog',
+        expiresAt: entry.expiresAt,
+      });
     }
     return changed ? 1 : 0;
   },
 
-async pfcount(keys: string[]): Promise<number> {
+  async pfcount(keys: string[]): Promise<number> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) this._ensureHllTypeOrThrow(key);
 
@@ -177,7 +185,7 @@ async pfcount(keys: string[]): Promise<number> {
     return this._hllEstimate(merged);
   },
 
-async pfmerge(destkey: string, sourceKeys: string[]): Promise<void> {
+  async pfmerge(destkey: string, sourceKeys: string[]): Promise<void> {
     this.evictIfExpired(destkey);
     for (const key of sourceKeys) this.evictIfExpired(key);
     for (const key of sourceKeys) this._ensureHllTypeOrThrow(key);
@@ -200,7 +208,10 @@ async pfmerge(destkey: string, sourceKeys: string[]): Promise<void> {
       }
     }
 
-    this.store.set(destkey, { value: this._hllEncode(merged), type: 'hyperloglog', expiresAt: null });
+    this.store.set(destkey, {
+      value: this._hllEncode(merged),
+      type: 'hyperloglog',
+      expiresAt: null,
+    });
   },
-
 };

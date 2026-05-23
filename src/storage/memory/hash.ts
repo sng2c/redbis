@@ -3,11 +3,11 @@ import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const hashMethods = {
-_ensureHashTypeOrThrow(key: string): void {
+  _ensureHashTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'hash');
   },
 
-_evictExpiredHashFields(key: string): void {
+  _evictExpiredHashFields(key: string): void {
     const fields = this.hashStore.get(key);
     if (!fields) return;
     const now = Date.now();
@@ -18,7 +18,7 @@ _evictExpiredHashFields(key: string): void {
     }
   },
 
-_cleanupHashIfEmpty(key: string): void {
+  _cleanupHashIfEmpty(key: string): void {
     const entry = this.store.get(key);
     if (!entry || entry.type !== 'hash') return;
     const fields = this.hashStore.get(key);
@@ -28,7 +28,7 @@ _cleanupHashIfEmpty(key: string): void {
     }
   },
 
-_hashGlobToRegex(pattern: string): RegExp {
+  _hashGlobToRegex(pattern: string): RegExp {
     let regexStr = '^';
     for (let i = 0; i < pattern.length; i++) {
       const ch = pattern[i];
@@ -41,7 +41,7 @@ _hashGlobToRegex(pattern: string): RegExp {
     return new RegExp(regexStr);
   },
 
-async hset(key: string, pairs: Array<{ field: string; value: string }>): Promise<number> {
+  async hset(key: string, pairs: Array<{ field: string; value: string }>): Promise<number> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._ensureHashTypeOrThrow(key);
@@ -65,7 +65,7 @@ async hset(key: string, pairs: Array<{ field: string; value: string }>): Promise
     return newCount;
   },
 
-async hget(key: string, field: string): Promise<string | null> {
+  async hget(key: string, field: string): Promise<string | null> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -77,7 +77,7 @@ async hget(key: string, field: string): Promise<string | null> {
     return entry?.value ?? null;
   },
 
-async hdel(key: string, fields: string[]): Promise<number> {
+  async hdel(key: string, fields: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     if (!this.store.has(key)) return 0;
@@ -92,7 +92,7 @@ async hdel(key: string, fields: string[]): Promise<number> {
     return deleted;
   },
 
-async hgetall(key: string): Promise<Array<{ field: string; value: string }>> {
+  async hgetall(key: string): Promise<Array<{ field: string; value: string }>> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -107,7 +107,7 @@ async hgetall(key: string): Promise<Array<{ field: string; value: string }>> {
     return result;
   },
 
-async hkeys(key: string): Promise<string[]> {
+  async hkeys(key: string): Promise<string[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -118,7 +118,7 @@ async hkeys(key: string): Promise<string[]> {
     return Array.from(fields.keys());
   },
 
-async hvals(key: string): Promise<string[]> {
+  async hvals(key: string): Promise<string[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -126,10 +126,10 @@ async hvals(key: string): Promise<string[]> {
     this._ensureHashTypeOrThrow(key);
     const fields = this.hashStore.get(key);
     if (!fields) return [];
-    return Array.from(fields.values()).map(e => e.value);
+    return Array.from(fields.values()).map((e) => e.value);
   },
 
-async hlen(key: string): Promise<number> {
+  async hlen(key: string): Promise<number> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -140,7 +140,7 @@ async hlen(key: string): Promise<number> {
     return fields.size;
   },
 
-async hexists(key: string, field: string): Promise<boolean> {
+  async hexists(key: string, field: string): Promise<boolean> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -151,7 +151,7 @@ async hexists(key: string, field: string): Promise<boolean> {
     return fields.has(field);
   },
 
-async hsetnx(key: string, field: string, value: string): Promise<boolean> {
+  async hsetnx(key: string, field: string, value: string): Promise<boolean> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._ensureHashTypeOrThrow(key);
@@ -167,7 +167,7 @@ async hsetnx(key: string, field: string, value: string): Promise<boolean> {
     return true;
   },
 
-async hmget(key: string, fields: string[]): Promise<(string | null)[]> {
+  async hmget(key: string, fields: string[]): Promise<(string | null)[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -175,13 +175,13 @@ async hmget(key: string, fields: string[]): Promise<(string | null)[]> {
     this._ensureHashTypeOrThrow(key);
     const hashFields = this.hashStore.get(key);
     if (!hashFields) return fields.map(() => null);
-    return fields.map(f => {
+    return fields.map((f) => {
       const entry = hashFields.get(f);
       return entry?.value ?? null;
     });
   },
 
-async hincrby(key: string, field: string, delta: number): Promise<number> {
+  async hincrby(key: string, field: string, delta: number): Promise<number> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._ensureHashTypeOrThrow(key);
@@ -207,7 +207,7 @@ async hincrby(key: string, field: string, delta: number): Promise<number> {
     return result;
   },
 
-async hincrbyfloat(key: string, field: string, delta: number): Promise<string> {
+  async hincrbyfloat(key: string, field: string, delta: number): Promise<string> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._ensureHashTypeOrThrow(key);
@@ -237,7 +237,7 @@ async hincrbyfloat(key: string, field: string, delta: number): Promise<string> {
     return resultStr;
   },
 
-async hrandfield(key: string, count: number): Promise<string[]> {
+  async hrandfield(key: string, count: number): Promise<string[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -264,7 +264,12 @@ async hrandfield(key: string, count: number): Promise<string[]> {
     }
   },
 
-async hscan(cursor: number, key: string, pattern?: string, count?: number): Promise<{ cursor: number; items: Array<{ field: string; value: string }> }> {
+  async hscan(
+    cursor: number,
+    key: string,
+    pattern?: string,
+    count?: number
+  ): Promise<{ cursor: number; items: Array<{ field: string; value: string }> }> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -288,7 +293,7 @@ async hscan(cursor: number, key: string, pattern?: string, count?: number): Prom
     return { cursor: nextCursor, items: matchedItems };
   },
 
-async hstrlen(key: string, field: string): Promise<number> {
+  async hstrlen(key: string, field: string): Promise<number> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -300,7 +305,7 @@ async hstrlen(key: string, field: string): Promise<number> {
     return entry?.value.length ?? 0;
   },
 
-async hgetdel(key: string, fields: string[]): Promise<(string | null)[]> {
+  async hgetdel(key: string, fields: string[]): Promise<(string | null)[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     if (!this.store.has(key)) return fields.map(() => null);
@@ -317,7 +322,11 @@ async hgetdel(key: string, fields: string[]): Promise<(string | null)[]> {
     return result;
   },
 
-async hgetex(key: string, fields: string[], options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }): Promise<(string | null)[]> {
+  async hgetex(
+    key: string,
+    fields: string[],
+    options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }
+  ): Promise<(string | null)[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     if (!this.store.has(key)) return fields.map(() => null);
@@ -345,7 +354,11 @@ async hgetex(key: string, fields: string[], options?: { ex?: number; px?: number
     return result;
   },
 
-async hsetex(key: string, pairs: Array<{ field: string; value: string }>, options?: { ex?: number; px?: number; exat?: number; pxat?: number; keepttl?: boolean }): Promise<number> {
+  async hsetex(
+    key: string,
+    pairs: Array<{ field: string; value: string }>,
+    options?: { ex?: number; px?: number; exat?: number; pxat?: number; keepttl?: boolean }
+  ): Promise<number> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._ensureHashTypeOrThrow(key);
@@ -388,7 +401,7 @@ async hsetex(key: string, pairs: Array<{ field: string; value: string }>, option
     return newCount;
   },
 
-async hexpire(key: string, fields: string[], seconds: number): Promise<number[]> {
+  async hexpire(key: string, fields: string[], seconds: number): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -409,7 +422,7 @@ async hexpire(key: string, fields: string[], seconds: number): Promise<number[]>
     return results;
   },
 
-async hexpireat(key: string, fields: string[], timestamp: number): Promise<number[]> {
+  async hexpireat(key: string, fields: string[], timestamp: number): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -430,7 +443,7 @@ async hexpireat(key: string, fields: string[], timestamp: number): Promise<numbe
     return results;
   },
 
-async hpexpire(key: string, fields: string[], milliseconds: number): Promise<number[]> {
+  async hpexpire(key: string, fields: string[], milliseconds: number): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -451,7 +464,7 @@ async hpexpire(key: string, fields: string[], milliseconds: number): Promise<num
     return results;
   },
 
-async hpexpireat(key: string, fields: string[], msTimestamp: number): Promise<number[]> {
+  async hpexpireat(key: string, fields: string[], msTimestamp: number): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -472,7 +485,7 @@ async hpexpireat(key: string, fields: string[], msTimestamp: number): Promise<nu
     return results;
   },
 
-async hexpiretime(key: string, fields: string[]): Promise<number[]> {
+  async hexpiretime(key: string, fields: string[]): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -494,7 +507,7 @@ async hexpiretime(key: string, fields: string[]): Promise<number[]> {
     return results;
   },
 
-async hpexpiretime(key: string, fields: string[]): Promise<number[]> {
+  async hpexpiretime(key: string, fields: string[]): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -516,7 +529,7 @@ async hpexpiretime(key: string, fields: string[]): Promise<number[]> {
     return results;
   },
 
-async hpersist(key: string, fields: string[]): Promise<number[]> {
+  async hpersist(key: string, fields: string[]): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -539,7 +552,7 @@ async hpersist(key: string, fields: string[]): Promise<number[]> {
     return results;
   },
 
-async httl(key: string, fields: string[]): Promise<number[]> {
+  async httl(key: string, fields: string[]): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -569,7 +582,7 @@ async httl(key: string, fields: string[]): Promise<number[]> {
     return results;
   },
 
-async hpttl(key: string, fields: string[]): Promise<number[]> {
+  async hpttl(key: string, fields: string[]): Promise<number[]> {
     this.evictIfExpired(key);
     this._evictExpiredHashFields(key);
     this._cleanupHashIfEmpty(key);
@@ -598,5 +611,4 @@ async hpttl(key: string, fields: string[]): Promise<number[]> {
     }
     return results;
   },
-
 };

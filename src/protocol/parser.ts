@@ -95,10 +95,7 @@ export class RespParser {
       }
 
       // Verify trailing CRLF
-      if (
-        this.buffer[dataEnd] !== 0x0d ||
-        this.buffer[dataEnd + 1] !== 0x0a
-      ) {
+      if (this.buffer[dataEnd] !== 0x0d || this.buffer[dataEnd + 1] !== 0x0a) {
         return null;
       }
 

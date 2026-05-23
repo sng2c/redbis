@@ -31,7 +31,11 @@ export function getActiveConnectionCount(): number {
   return defaultManager.activeConnectionCount;
 }
 
-export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager, manager: ConnectionManager = defaultManager): (socket: net.Socket) => void {
+export function createConnectionHandler(
+  storage: IStorage,
+  pubsub: PubSubManager,
+  manager: ConnectionManager = defaultManager
+): (socket: net.Socket) => void {
   return function handleConnection(socket: net.Socket): void {
     manager.addSocket(socket);
     const remoteAddress = socket.remoteAddress ?? 'unknown';
@@ -41,7 +45,9 @@ export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager
 
     logger.info('Client connected', { clientId, activeConnections: manager.activeConnectionCount });
 
-    const send = (msg: string) => { socket.write(msg); };
+    const send = (msg: string) => {
+      socket.write(msg);
+    };
     const handler = new CommandHandler(storage, pubsub, connId, send);
     const parser = new RespParser();
 
@@ -55,18 +61,24 @@ export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager
       parser.feed(data);
       let parsed: string[] | null;
       while ((parsed = parser.parse()) !== null) {
-        handler.execute(parsed).then((response: string) => {
-          socket.write(response);
-        }).catch((err: Error) => {
-          logger.error('Command execution error', { clientId, error: err.message });
-        });
+        handler
+          .execute(parsed)
+          .then((response: string) => {
+            socket.write(response);
+          })
+          .catch((err: Error) => {
+            logger.error('Command execution error', { clientId, error: err.message });
+          });
       }
     });
 
     socket.on('close', () => {
       handler.destroy();
       manager.removeSocket(socket);
-      logger.info('Client disconnected', { clientId, activeConnections: manager.activeConnectionCount });
+      logger.info('Client disconnected', {
+        clientId,
+        activeConnections: manager.activeConnectionCount,
+      });
     });
 
     socket.on('error', (err: Error) => {

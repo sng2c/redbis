@@ -18,7 +18,8 @@ import { customMethods } from './custom';
 import { serverMethods } from './server';
 
 // Apply all mixin methods to the prototype
-Object.assign(SqliteStorage.prototype,
+Object.assign(
+  SqliteStorage.prototype,
   hashMethods,
   listMethods,
   setMethods,
@@ -30,7 +31,7 @@ Object.assign(SqliteStorage.prototype,
   geoMethods,
   sortMethods,
   customMethods,
-  serverMethods,
+  serverMethods
 );
 
 // TypeScript declaration merging: SqliteStorage implements IStorage.

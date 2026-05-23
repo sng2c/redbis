@@ -111,10 +111,18 @@ async function handleSet(ctx: HandlerContext, args: string[]): Promise<string> {
         if (isNaN(pxat) || pxat <= 0) return encodeError('ERR invalid expire time in set');
         break;
       }
-      case 'NX': nx = true; break;
-      case 'XX': xx = true; break;
-      case 'GET': get = true; break;
-      case 'KEEPTTL': keepttl = true; break;
+      case 'NX':
+        nx = true;
+        break;
+      case 'XX':
+        xx = true;
+        break;
+      case 'GET':
+        get = true;
+        break;
+      case 'KEEPTTL':
+        keepttl = true;
+        break;
       default:
         // Unknown option — skip silently for backward compat
         break;
@@ -228,63 +236,251 @@ async function handleFlushdb(ctx: HandlerContext, args: string[]): Promise<strin
 
 function getCommandList(): string[] {
   return [
-    'PING', 'SET', 'GET', 'DEL', 'KEYS', 'EXISTS', 'FLUSHDB', 'FLUSHALL', 'COMMAND',
-    'MGET', 'MSET', 'MSETNX',
-    'APPEND', 'STRLEN', 'GETRANGE', 'SETRANGE',
-    'INCR', 'DECR', 'INCRBY', 'DECRBY', 'INCRBYFLOAT',
-    'SETNX', 'SETEX', 'PSETEX', 'GETSET', 'GETDEL', 'GETEX',
-    'RENAME', 'RENAMENX', 'TYPE', 'DBSIZE', 'COPY', 'RANDOMKEY', 'UNLINK', 'TOUCH', 'SCAN',
-    'EXPIRE', 'EXPIREAT', 'PEXPIRE', 'PEXPIREAT', 'TTL', 'PTTL', 'PERSIST', 'EXPIRETIME', 'PEXPIRETIME',
-    'ECHO', 'QUIT',
+    'PING',
+    'SET',
+    'GET',
+    'DEL',
+    'KEYS',
+    'EXISTS',
+    'FLUSHDB',
+    'FLUSHALL',
+    'COMMAND',
+    'MGET',
+    'MSET',
+    'MSETNX',
+    'APPEND',
+    'STRLEN',
+    'GETRANGE',
+    'SETRANGE',
+    'INCR',
+    'DECR',
+    'INCRBY',
+    'DECRBY',
+    'INCRBYFLOAT',
+    'SETNX',
+    'SETEX',
+    'PSETEX',
+    'GETSET',
+    'GETDEL',
+    'GETEX',
+    'RENAME',
+    'RENAMENX',
+    'TYPE',
+    'DBSIZE',
+    'COPY',
+    'RANDOMKEY',
+    'UNLINK',
+    'TOUCH',
+    'SCAN',
+    'EXPIRE',
+    'EXPIREAT',
+    'PEXPIRE',
+    'PEXPIREAT',
+    'TTL',
+    'PTTL',
+    'PERSIST',
+    'EXPIRETIME',
+    'PEXPIRETIME',
+    'ECHO',
+    'QUIT',
     'LCS',
-    'SUBSCRIBE', 'UNSUBSCRIBE', 'PSUBSCRIBE', 'PUNSUBSCRIBE', 'PUBLISH',
-    'SPUBLISH', 'SSUBSCRIBE', 'SUNSUBSCRIBE', 'PUBSUB',
-    'MULTI', 'EXEC', 'DISCARD',
-    'INFO', 'TIME', 'LASTSAVE', 'SAVE', 'SHUTDOWN', 'CONFIG', 'SLOWLOG', 'MEMORY',
-    'HSET', 'HGET', 'HDEL', 'HGETALL', 'HKEYS', 'HVALS', 'HLEN', 'HEXISTS',
-    'HSETNX', 'HMSET', 'HMGET', 'HINCRBY', 'HINCRBYFLOAT', 'HRANDFIELD', 'HSCAN',
-    'HSTRLEN', 'HGETDEL', 'HGETEX', 'HSETEX',
-    'HEXPIRE', 'HEXPIREAT', 'HPEXPIRE', 'HPEXPIREAT', 'HEXPIRETIME', 'HPEXPIRETIME',
-    'HPERSIST', 'HTTL', 'HPTTL',
-    'LPUSH', 'RPUSH', 'LPOP', 'RPOP', 'LLEN', 'LRANGE', 'LINDEX',
-    'LSET', 'LREM', 'LTRIM', 'LPOS', 'RPOPLPUSH', 'LPUSHX', 'RPUSHX',
-    'LINSERT', 'LMOVE', 'BLPOP', 'BRPOP', 'BRPOPLPUSH', 'BLMOVE', 'LMPOP',
-    'SADD', 'SREM', 'SMEMBERS', 'SCARD', 'SISMEMBER', 'SMISMEMBER',
-    'SRANDMEMBER', 'SPOP', 'SMOVE', 'SDIFF', 'SINTER', 'SUNION',
-    'SDIFFSTORE', 'SINTERSTORE', 'SUNIONSTORE', 'SINTERCARD', 'SSCAN',
-    'ZADD', 'ZREM', 'ZSCORE', 'ZCARD', 'ZRANGE', 'ZREVRANGE',
-    'ZRANGEBYSCORE', 'ZREVRANGEBYSCORE', 'ZRANGEBYLEX', 'ZREVRANGEBYLEX',
-    'ZRANK', 'ZREVRANK', 'ZINCRBY', 'ZCOUNT',
-    'ZREMRANGEBYRANK', 'ZREMRANGEBYSCORE', 'ZREMRANGEBYLEX', 'ZLEXCOUNT',
-    'ZSCAN', 'ZPOPMAX', 'ZPOPMIN', 'ZRANDMEMBER', 'ZMSCORE',
-    'ZRANGESTORE', 'ZDIFF', 'ZDIFFSTORE', 'ZUNION', 'ZUNIONSTORE',
-    'ZINTER', 'ZINTERSTORE', 'ZINTERCARD',
-    'BZPOPMAX', 'BZPOPMIN', 'BZMPOP', 'ZMPOP',
+    'SUBSCRIBE',
+    'UNSUBSCRIBE',
+    'PSUBSCRIBE',
+    'PUNSUBSCRIBE',
+    'PUBLISH',
+    'SPUBLISH',
+    'SSUBSCRIBE',
+    'SUNSUBSCRIBE',
+    'PUBSUB',
+    'MULTI',
+    'EXEC',
+    'DISCARD',
+    'INFO',
+    'TIME',
+    'LASTSAVE',
+    'SAVE',
+    'SHUTDOWN',
+    'CONFIG',
+    'SLOWLOG',
+    'MEMORY',
+    'HSET',
+    'HGET',
+    'HDEL',
+    'HGETALL',
+    'HKEYS',
+    'HVALS',
+    'HLEN',
+    'HEXISTS',
+    'HSETNX',
+    'HMSET',
+    'HMGET',
+    'HINCRBY',
+    'HINCRBYFLOAT',
+    'HRANDFIELD',
+    'HSCAN',
+    'HSTRLEN',
+    'HGETDEL',
+    'HGETEX',
+    'HSETEX',
+    'HEXPIRE',
+    'HEXPIREAT',
+    'HPEXPIRE',
+    'HPEXPIREAT',
+    'HEXPIRETIME',
+    'HPEXPIRETIME',
+    'HPERSIST',
+    'HTTL',
+    'HPTTL',
+    'LPUSH',
+    'RPUSH',
+    'LPOP',
+    'RPOP',
+    'LLEN',
+    'LRANGE',
+    'LINDEX',
+    'LSET',
+    'LREM',
+    'LTRIM',
+    'LPOS',
+    'RPOPLPUSH',
+    'LPUSHX',
+    'RPUSHX',
+    'LINSERT',
+    'LMOVE',
+    'BLPOP',
+    'BRPOP',
+    'BRPOPLPUSH',
+    'BLMOVE',
+    'LMPOP',
+    'SADD',
+    'SREM',
+    'SMEMBERS',
+    'SCARD',
+    'SISMEMBER',
+    'SMISMEMBER',
+    'SRANDMEMBER',
+    'SPOP',
+    'SMOVE',
+    'SDIFF',
+    'SINTER',
+    'SUNION',
+    'SDIFFSTORE',
+    'SINTERSTORE',
+    'SUNIONSTORE',
+    'SINTERCARD',
+    'SSCAN',
+    'ZADD',
+    'ZREM',
+    'ZSCORE',
+    'ZCARD',
+    'ZRANGE',
+    'ZREVRANGE',
+    'ZRANGEBYSCORE',
+    'ZREVRANGEBYSCORE',
+    'ZRANGEBYLEX',
+    'ZREVRANGEBYLEX',
+    'ZRANK',
+    'ZREVRANK',
+    'ZINCRBY',
+    'ZCOUNT',
+    'ZREMRANGEBYRANK',
+    'ZREMRANGEBYSCORE',
+    'ZREMRANGEBYLEX',
+    'ZLEXCOUNT',
+    'ZSCAN',
+    'ZPOPMAX',
+    'ZPOPMIN',
+    'ZRANDMEMBER',
+    'ZMSCORE',
+    'ZRANGESTORE',
+    'ZDIFF',
+    'ZDIFFSTORE',
+    'ZUNION',
+    'ZUNIONSTORE',
+    'ZINTER',
+    'ZINTERSTORE',
+    'ZINTERCARD',
+    'BZPOPMAX',
+    'BZPOPMIN',
+    'BZMPOP',
+    'ZMPOP',
     // Bitmap
-    'SETBIT', 'GETBIT', 'BITCOUNT', 'BITPOS', 'BITOP', 'BITFIELD', 'BITFIELD_RO',
+    'SETBIT',
+    'GETBIT',
+    'BITCOUNT',
+    'BITPOS',
+    'BITOP',
+    'BITFIELD',
+    'BITFIELD_RO',
     // HyperLogLog
-    'PFADD', 'PFCOUNT', 'PFMERGE',
+    'PFADD',
+    'PFCOUNT',
+    'PFMERGE',
     // JSON
-    'JSON.SET', 'JSON.GET', 'JSON.DEL', 'JSON.FORGET', 'JSON.TYPE',
-    'JSON.STRLEN', 'JSON.STRAPPEND', 'JSON.OBJKEYS', 'JSON.OBJLEN',
-    'JSON.ARRAPPEND', 'JSON.ARRINDEX', 'JSON.ARRINSERT', 'JSON.ARRLEN',
-    'JSON.ARRPOP', 'JSON.ARRTRIM', 'JSON.NUMINCRBY', 'JSON.NUMMULTBY',
-    'JSON.MGET', 'JSON.MSET', 'JSON.TOGGLE', 'JSON.CLEAR',
-    'JSON.DEBUG', 'JSON.RESP', 'JSON.MERGE',
+    'JSON.SET',
+    'JSON.GET',
+    'JSON.DEL',
+    'JSON.FORGET',
+    'JSON.TYPE',
+    'JSON.STRLEN',
+    'JSON.STRAPPEND',
+    'JSON.OBJKEYS',
+    'JSON.OBJLEN',
+    'JSON.ARRAPPEND',
+    'JSON.ARRINDEX',
+    'JSON.ARRINSERT',
+    'JSON.ARRLEN',
+    'JSON.ARRPOP',
+    'JSON.ARRTRIM',
+    'JSON.NUMINCRBY',
+    'JSON.NUMMULTBY',
+    'JSON.MGET',
+    'JSON.MSET',
+    'JSON.TOGGLE',
+    'JSON.CLEAR',
+    'JSON.DEBUG',
+    'JSON.RESP',
+    'JSON.MERGE',
     // GEO
-    'GEOADD', 'GEOHASH', 'GEOPOS', 'GEODIST',
-    'GEORADIUS', 'GEORADIUSBYMEMBER', 'GEOSEARCH', 'GEOSEARCHSTORE',
-    'GEORADIUS_RO', 'GEORADIUSBYMEMBER_RO',
+    'GEOADD',
+    'GEOHASH',
+    'GEOPOS',
+    'GEODIST',
+    'GEORADIUS',
+    'GEORADIUSBYMEMBER',
+    'GEOSEARCH',
+    'GEOSEARCHSTORE',
+    'GEORADIUS_RO',
+    'GEORADIUSBYMEMBER_RO',
     // Stream
-    'XADD', 'XTRIM', 'XDEL', 'XRANGE', 'XREVRANGE', 'XLEN',
-    'XREAD', 'XGROUP', 'XREADGROUP', 'XACK', 'XPENDING',
-    'XCLAIM', 'XAUTOCLAIM', 'XINFO', 'XSETID',
+    'XADD',
+    'XTRIM',
+    'XDEL',
+    'XRANGE',
+    'XREVRANGE',
+    'XLEN',
+    'XREAD',
+    'XGROUP',
+    'XREADGROUP',
+    'XACK',
+    'XPENDING',
+    'XCLAIM',
+    'XAUTOCLAIM',
+    'XINFO',
+    'XSETID',
     // Sort
-    'SORT', 'SORT_RO',
+    'SORT',
+    'SORT_RO',
     // Connection / Server
-    'AUTH', 'HELLO', 'RESET', 'SELECT',
-    'CLIENT', 'BGSAVE',
-    'DELEX', 'MSETEX',
+    'AUTH',
+    'HELLO',
+    'RESET',
+    'SELECT',
+    'CLIENT',
+    'BGSAVE',
+    'DELEX',
+    'MSETEX',
   ];
 }
 
@@ -294,7 +490,8 @@ function handleCommand(ctx: HandlerContext, args: string[]): string {
   }
   const sub = args[0].toUpperCase();
   switch (sub) {
-    case 'COUNT': return encodeInteger(getCommandList().length);
+    case 'COUNT':
+      return encodeInteger(getCommandList().length);
     case 'INFO': {
       const results: string[] = [];
       for (let i = 1; i < args.length; i++) {
@@ -305,11 +502,16 @@ function handleCommand(ctx: HandlerContext, args: string[]): string {
       }
       return encodeRawArray(results);
     }
-    case 'DOCS': return encodeArray(null);
-    case 'LIST': return encodeArray(getCommandList());
-    case 'GETKEYS': return handleCommandGetkeys(args.slice(1));
-    case 'GETKEYSANDFLAGS': return handleCommandGetkeysandflags(args.slice(1));
-    default: return encodeError('unknown subcommand');
+    case 'DOCS':
+      return encodeArray(null);
+    case 'LIST':
+      return encodeArray(getCommandList());
+    case 'GETKEYS':
+      return handleCommandGetkeys(args.slice(1));
+    case 'GETKEYSANDFLAGS':
+      return handleCommandGetkeysandflags(args.slice(1));
+    default:
+      return encodeError('unknown subcommand');
   }
 }
 
@@ -318,10 +520,24 @@ function handleCommandGetkeys(args: string[]): string {
   const cmd = args[0].toUpperCase();
   const keys: string[] = [];
   switch (cmd) {
-    case 'GET': case 'DEL': case 'TYPE': case 'EXISTS':
-    case 'INCR': case 'DECR': case 'INCRBY': case 'DECRBY': case 'INCRBYFLOAT':
-    case 'EXPIRE': case 'EXPIREAT': case 'PEXPIRE': case 'PEXPIREAT':
-    case 'TTL': case 'PTTL': case 'PERSIST': case 'EXPIRETIME': case 'PEXPIRETIME':
+    case 'GET':
+    case 'DEL':
+    case 'TYPE':
+    case 'EXISTS':
+    case 'INCR':
+    case 'DECR':
+    case 'INCRBY':
+    case 'DECRBY':
+    case 'INCRBYFLOAT':
+    case 'EXPIRE':
+    case 'EXPIREAT':
+    case 'PEXPIRE':
+    case 'PEXPIREAT':
+    case 'TTL':
+    case 'PTTL':
+    case 'PERSIST':
+    case 'EXPIRETIME':
+    case 'PEXPIRETIME':
       if (args.length >= 2) keys.push(args[1]);
       break;
     case 'SET':
@@ -330,10 +546,15 @@ function handleCommandGetkeys(args: string[]): string {
     case 'MGET':
       for (let i = 1; i < args.length; i++) keys.push(args[i]);
       break;
-    case 'HGET': case 'HDEL': case 'HINCRBY': case 'HINCRBYFLOAT':
+    case 'HGET':
+    case 'HDEL':
+    case 'HINCRBY':
+    case 'HINCRBYFLOAT':
       if (args.length >= 2) keys.push(args[1]);
       break;
-    case 'HSET': case 'HMSET': case 'HMGET':
+    case 'HSET':
+    case 'HMSET':
+    case 'HMGET':
       if (args.length >= 2) keys.push(args[1]);
       break;
     default:
@@ -347,14 +568,23 @@ function handleCommandGetkeysandflags(args: string[]): string {
   const cmd = args[0].toUpperCase();
   const keys: string[] = [];
   switch (cmd) {
-    case 'GET': case 'SET': case 'DEL': case 'TYPE': case 'EXISTS':
-    case 'INCR': case 'DECR': case 'INCRBY': case 'DECRBY':
+    case 'GET':
+    case 'SET':
+    case 'DEL':
+    case 'TYPE':
+    case 'EXISTS':
+    case 'INCR':
+    case 'DECR':
+    case 'INCRBY':
+    case 'DECRBY':
       if (args.length >= 2) keys.push(args[1]);
       break;
     case 'MGET':
       for (let i = 1; i < args.length; i++) keys.push(args[i]);
       break;
-    case 'HGET': case 'HSET': case 'HDEL':
+    case 'HGET':
+    case 'HSET':
+    case 'HDEL':
       if (args.length >= 2) keys.push(args[1]);
       break;
     default:
@@ -374,7 +604,7 @@ async function handleMget(ctx: HandlerContext, args: string[]): Promise<string> 
     return encodeError("wrong number of arguments for 'MGET' command");
   }
   const results = await ctx.storage.mget(args);
-  const parts = results.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = results.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -585,8 +815,11 @@ async function handleGetex(ctx: HandlerContext, args: string[]): Promise<string>
         if (isNaN(options.pxat)) return encodeError('ERR value is not an integer or out of range');
         break;
       }
-      case 'PERSIST': options.persist = true; break;
-      default: return encodeError('ERR syntax error');
+      case 'PERSIST':
+        options.persist = true;
+        break;
+      default:
+        return encodeError('ERR syntax error');
     }
   }
 
@@ -611,8 +844,12 @@ async function handleLcs(ctx: HandlerContext, args: string[]): Promise<string> {
   for (let i = 2; i < args.length; i++) {
     const opt = args[i].toUpperCase();
     switch (opt) {
-      case 'LEN': lenOnly = true; break;
-      case 'IDX': idx = true; break;
+      case 'LEN':
+        lenOnly = true;
+        break;
+      case 'IDX':
+        idx = true;
+        break;
       case 'MINMATCHLEN': {
         i++;
         if (i >= args.length) return encodeError('ERR syntax error');
@@ -620,7 +857,9 @@ async function handleLcs(ctx: HandlerContext, args: string[]): Promise<string> {
         if (isNaN(minmatchlen)) return encodeError('ERR value is not an integer or out of range');
         break;
       }
-      case 'WITHMATCHLEN': withmatchlen = true; break;
+      case 'WITHMATCHLEN':
+        withmatchlen = true;
+        break;
       default:
         return encodeError('ERR syntax error');
     }
@@ -727,9 +966,8 @@ async function handleLcs(ctx: HandlerContext, args: string[]): Promise<string> {
       matchArrays.push(`*${items.length}\r\n${items.join('')}`);
     }
 
-    const matchesArr = matchArrays.length === 0
-      ? '*0\r\n'
-      : `*${matchArrays.length}\r\n${matchArrays.join('')}`;
+    const matchesArr =
+      matchArrays.length === 0 ? '*0\r\n' : `*${matchArrays.length}\r\n${matchArrays.join('')}`;
 
     return `*2\r\n$7\r\nmatches\r\n${matchesArr}$3\r\nlen\r\n${encodeInteger(lcsLen)}`;
   }

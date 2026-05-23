@@ -3,11 +3,11 @@ import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const listMethods = {
-_ensureListTypeOrThrow(key: string): void {
+  _ensureListTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'list');
   },
 
-_ensureListKeyExists(key: string): void {
+  _ensureListKeyExists(key: string): void {
     if (!this.store.has(key)) {
       this.store.set(key, { value: '', type: 'list', expiresAt: null });
     }
@@ -16,7 +16,7 @@ _ensureListKeyExists(key: string): void {
     }
   },
 
-_cleanupListIfEmpty(key: string): void {
+  _cleanupListIfEmpty(key: string): void {
     const entry = this.store.get(key);
     if (!entry || entry.type !== 'list') return;
     const list = this.listStore.get(key);
@@ -26,7 +26,7 @@ _cleanupListIfEmpty(key: string): void {
     }
   },
 
-async lpush(key: string, elements: string[]): Promise<number> {
+  async lpush(key: string, elements: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureListTypeOrThrow(key);
     this._ensureListKeyExists(key);
@@ -37,7 +37,7 @@ async lpush(key: string, elements: string[]): Promise<number> {
     return list.length;
   },
 
-async rpush(key: string, elements: string[]): Promise<number> {
+  async rpush(key: string, elements: string[]): Promise<number> {
     this.evictIfExpired(key);
     this._ensureListTypeOrThrow(key);
     this._ensureListKeyExists(key);
@@ -46,7 +46,7 @@ async rpush(key: string, elements: string[]): Promise<number> {
     return list.length;
   },
 
-async lpop(key: string, count?: number): Promise<string | string[] | null> {
+  async lpop(key: string, count?: number): Promise<string | string[] | null> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return count !== undefined ? null : null;
     this._ensureListTypeOrThrow(key);
@@ -68,7 +68,7 @@ async lpop(key: string, count?: number): Promise<string | string[] | null> {
     return result;
   },
 
-async rpop(key: string, count?: number): Promise<string | string[] | null> {
+  async rpop(key: string, count?: number): Promise<string | string[] | null> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return null;
     this._ensureListTypeOrThrow(key);
@@ -90,7 +90,7 @@ async rpop(key: string, count?: number): Promise<string | string[] | null> {
     return result;
   },
 
-async llen(key: string): Promise<number> {
+  async llen(key: string): Promise<number> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return 0;
     this._ensureListTypeOrThrow(key);
@@ -98,7 +98,7 @@ async llen(key: string): Promise<number> {
     return list ? list.length : 0;
   },
 
-async lrange(key: string, start: number, stop: number): Promise<string[]> {
+  async lrange(key: string, start: number, stop: number): Promise<string[]> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return [];
     this._ensureListTypeOrThrow(key);
@@ -114,7 +114,7 @@ async lrange(key: string, start: number, stop: number): Promise<string[]> {
     return list.slice(s, e + 1);
   },
 
-async lindex(key: string, index: number): Promise<string | null> {
+  async lindex(key: string, index: number): Promise<string | null> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return null;
     this._ensureListTypeOrThrow(key);
@@ -126,7 +126,7 @@ async lindex(key: string, index: number): Promise<string | null> {
     return list[idx];
   },
 
-async lset(key: string, index: number, element: string): Promise<void> {
+  async lset(key: string, index: number, element: string): Promise<void> {
     this.evictIfExpired(key);
     this._ensureListTypeOrThrow(key);
     const list = this.listStore.get(key);
@@ -137,7 +137,7 @@ async lset(key: string, index: number, element: string): Promise<void> {
     list[idx] = element;
   },
 
-async lrem(key: string, count: number, element: string): Promise<number> {
+  async lrem(key: string, count: number, element: string): Promise<number> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return 0;
     this._ensureListTypeOrThrow(key);
@@ -177,8 +177,8 @@ async lrem(key: string, count: number, element: string): Promise<number> {
       list.length = 0;
       list.push(...kept);
     } else {
-      removed = list.filter(item => item === element).length;
-      const newList = list.filter(item => item !== element);
+      removed = list.filter((item) => item === element).length;
+      const newList = list.filter((item) => item !== element);
       list.length = 0;
       list.push(...newList);
     }
@@ -186,7 +186,7 @@ async lrem(key: string, count: number, element: string): Promise<number> {
     return removed;
   },
 
-async ltrim(key: string, start: number, stop: number): Promise<void> {
+  async ltrim(key: string, start: number, stop: number): Promise<void> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return;
     this._ensureListTypeOrThrow(key);
@@ -209,7 +209,11 @@ async ltrim(key: string, start: number, stop: number): Promise<void> {
     this._cleanupListIfEmpty(key);
   },
 
-async lpos(key: string, element: string, options?: { rank?: number; maxlen?: number }): Promise<number | null> {
+  async lpos(
+    key: string,
+    element: string,
+    options?: { rank?: number; maxlen?: number }
+  ): Promise<number | null> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return null;
     this._ensureListTypeOrThrow(key);
@@ -230,7 +234,7 @@ async lpos(key: string, element: string, options?: { rank?: number; maxlen?: num
     return null;
   },
 
-async rpoplpush(source: string, destination: string): Promise<string | null> {
+  async rpoplpush(source: string, destination: string): Promise<string | null> {
     this.evictIfExpired(source);
     this.evictIfExpired(destination);
     this._ensureListTypeOrThrow(source);
@@ -245,7 +249,7 @@ async rpoplpush(source: string, destination: string): Promise<string | null> {
     return val;
   },
 
-async lpushx(key: string, element: string): Promise<number> {
+  async lpushx(key: string, element: string): Promise<number> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return 0;
     this._ensureListTypeOrThrow(key);
@@ -255,7 +259,7 @@ async lpushx(key: string, element: string): Promise<number> {
     return list.length;
   },
 
-async rpushx(key: string, element: string): Promise<number> {
+  async rpushx(key: string, element: string): Promise<number> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return 0;
     this._ensureListTypeOrThrow(key);
@@ -265,7 +269,12 @@ async rpushx(key: string, element: string): Promise<number> {
     return list.length;
   },
 
-async linsert(key: string, position: 'BEFORE' | 'AFTER', pivot: string, element: string): Promise<number> {
+  async linsert(
+    key: string,
+    position: 'BEFORE' | 'AFTER',
+    pivot: string,
+    element: string
+  ): Promise<number> {
     this.evictIfExpired(key);
     if (!this.store.has(key)) return 0;
     this._ensureListTypeOrThrow(key);
@@ -278,7 +287,12 @@ async linsert(key: string, position: 'BEFORE' | 'AFTER', pivot: string, element:
     return list.length;
   },
 
-async lmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destDir: 'LEFT' | 'RIGHT'): Promise<string | null> {
+  async lmove(
+    source: string,
+    destination: string,
+    srcDir: 'LEFT' | 'RIGHT',
+    destDir: 'LEFT' | 'RIGHT'
+  ): Promise<string | null> {
     this.evictIfExpired(source);
     this.evictIfExpired(destination);
     this._ensureListTypeOrThrow(source);
@@ -297,7 +311,7 @@ async lmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destD
     return val;
   },
 
-async blpop(keys: string[], timeout: number): Promise<{ key: string; element: string } | null> {
+  async blpop(keys: string[], timeout: number): Promise<{ key: string; element: string } | null> {
     for (const key of keys) {
       this.evictIfExpired(key);
       this._ensureListTypeOrThrow(key);
@@ -313,7 +327,7 @@ async blpop(keys: string[], timeout: number): Promise<{ key: string; element: st
     return null;
   },
 
-async brpop(keys: string[], timeout: number): Promise<{ key: string; element: string } | null> {
+  async brpop(keys: string[], timeout: number): Promise<{ key: string; element: string } | null> {
     for (const key of keys) {
       this.evictIfExpired(key);
       this._ensureListTypeOrThrow(key);
@@ -329,15 +343,26 @@ async brpop(keys: string[], timeout: number): Promise<{ key: string; element: st
     return null;
   },
 
-async brpoplpush(source: string, destination: string, timeout: number): Promise<string | null> {
+  async brpoplpush(source: string, destination: string, timeout: number): Promise<string | null> {
     return this.rpoplpush(source, destination);
   },
 
-async blmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destDir: 'LEFT' | 'RIGHT', timeout: number): Promise<string | null> {
+  async blmove(
+    source: string,
+    destination: string,
+    srcDir: 'LEFT' | 'RIGHT',
+    destDir: 'LEFT' | 'RIGHT',
+    timeout: number
+  ): Promise<string | null> {
     return this.lmove(source, destination, srcDir, destDir);
   },
 
-async lmpop(numkeys: number, keys: string[], dir: 'LEFT' | 'RIGHT', count?: number): Promise<{ key: string; elements: string[] } | null> {
+  async lmpop(
+    numkeys: number,
+    keys: string[],
+    dir: 'LEFT' | 'RIGHT',
+    count?: number
+  ): Promise<{ key: string; elements: string[] } | null> {
     const effectiveCount = count ?? 1;
     for (const key of keys) {
       this.evictIfExpired(key);
@@ -360,5 +385,4 @@ async lmpop(numkeys: number, keys: string[], dir: 'LEFT' | 'RIGHT', count?: numb
     }
     return null;
   },
-
 };

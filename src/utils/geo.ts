@@ -4,11 +4,11 @@
 
 export interface GeoSearchResult {
   member: string;
-  distance?: number;      // in requested unit
+  distance?: number; // in requested unit
   longitude?: number;
   latitude?: number;
   geohash?: string;
-  score: number;          // the 52-bit geohash score from ZSet
+  score: number; // the 52-bit geohash score from ZSet
 }
 
 const LAT_MIN = -85.05112878;
@@ -95,11 +95,11 @@ const GEOHASH_BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
 /** Convert a 52-bit geohash integer to its base-32 GeoHash string (11 chars). */
 export function geohashToString(hash: number): string {
   // 52 bits of geohash. To produce a geohash string, we need to extract
-  // 5-bit groups from MSB. 11 groups × 5 bits = 55 bits, so we prepend 
+  // 5-bit groups from MSB. 11 groups × 5 bits = 55 bits, so we prepend
   // 3 zero bits, effectively working with (hash) as bits 51..0.
-  // 
+  //
   // The geohash string representation takes 5-bit groups starting from MSB:
-  // Group 0: bits 54-50 (3 zero padding bits + top 2 bits of hash)  
+  // Group 0: bits 54-50 (3 zero padding bits + top 2 bits of hash)
   // Group 1: bits 49-45
   // ... etc
   // Group 10: bits 4-0
@@ -129,25 +129,35 @@ export function geohashToString(hash: number): string {
 
 /** Haversine formula for great-circle distance between two points. */
 export function calculateDistance(
-  lon1: number, lat1: number,
-  lon2: number, lat2: number,
+  lon1: number,
+  lat1: number,
+  lon2: number,
+  lat2: number,
   unit: 'm' | 'km' | 'ft' | 'mi' = 'm'
 ): number {
-  const toRad = (deg: number) => deg * Math.PI / 180;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   let R: number;
   switch (unit) {
-    case 'km': R = 6371; break;
-    case 'ft': R = 20902200; break;
-    case 'mi': R = 3963; break;
+    case 'km':
+      R = 6371;
+      break;
+    case 'ft':
+      R = 20902200;
+      break;
+    case 'mi':
+      R = 3963;
+      break;
     case 'm':
-    default: R = 6370986; break;
+    default:
+      R = 6370986;
+      break;
   }
 
   const d = R * c;
@@ -156,9 +166,11 @@ export function calculateDistance(
 
 /** Compute bounding box for a radius search around a point. */
 export function getBoundingBox(
-  longitude: number, latitude: number, radiusMeters: number
+  longitude: number,
+  latitude: number,
+  radiusMeters: number
 ): { minLon: number; maxLon: number; minLat: number; maxLat: number } {
-  const toRad = (deg: number) => deg * Math.PI / 180;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
 
   const latRad = toRad(latitude);
 
@@ -177,8 +189,11 @@ export function getBoundingBox(
 
 /** Check if a point is within the radius of a center point. */
 export function isInRadius(
-  centerLon: number, centerLat: number, radiusMeters: number,
-  pointLon: number, pointLat: number
+  centerLon: number,
+  centerLat: number,
+  radiusMeters: number,
+  pointLon: number,
+  pointLat: number
 ): boolean {
   return calculateDistance(centerLon, centerLat, pointLon, pointLat, 'm') <= radiusMeters;
 }
@@ -186,21 +201,29 @@ export function isInRadius(
 /** Convert a distance in the given unit to meters. */
 export function convertToMeters(distance: number, unit: 'm' | 'km' | 'ft' | 'mi'): number {
   switch (unit) {
-    case 'km': return distance * 1000;
-    case 'ft': return distance * 0.3048;
-    case 'mi': return distance * 1609.34;
+    case 'km':
+      return distance * 1000;
+    case 'ft':
+      return distance * 0.3048;
+    case 'mi':
+      return distance * 1609.34;
     case 'm':
-    default: return distance;
+    default:
+      return distance;
   }
 }
 
 /** Convert a distance in meters to the given unit. */
 export function convertFromMeters(distanceMeters: number, unit: 'm' | 'km' | 'ft' | 'mi'): number {
   switch (unit) {
-    case 'km': return distanceMeters / 1000;
-    case 'ft': return distanceMeters / 0.3048;
-    case 'mi': return distanceMeters / 1609.34;
+    case 'km':
+      return distanceMeters / 1000;
+    case 'ft':
+      return distanceMeters / 0.3048;
+    case 'mi':
+      return distanceMeters / 1609.34;
     case 'm':
-    default: return distanceMeters;
+    default:
+      return distanceMeters;
   }
 }

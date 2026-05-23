@@ -39,7 +39,8 @@ async function handleJsonSet(ctx: HandlerContext, args: string[]): Promise<strin
   const key = args[0];
   const path = args[1];
   const value = args[2];
-  let nx = false, xx = false;
+  let nx = false,
+    xx = false;
   for (let i = 3; i < args.length; i++) {
     const opt = args[i].toUpperCase();
     if (opt === 'NX') nx = true;
@@ -118,7 +119,7 @@ async function handleJsonArrappend(ctx: HandlerContext, args: string[]): Promise
   const path = args[1];
   const values = args.slice(2);
   const result = await ctx.storage.jsonArrappend(key, path, values);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeInteger(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -129,8 +130,14 @@ async function handleJsonArrindex(ctx: HandlerContext, args: string[]): Promise<
   const value = args[2];
   let start: number | undefined;
   let stop: number | undefined;
-  if (args.length >= 4) { start = parseInt(args[3]); if (isNaN(start)) return encodeError('ERR value is not an integer or out of range'); }
-  if (args.length >= 5) { stop = parseInt(args[4]); if (isNaN(stop)) return encodeError('ERR value is not an integer or out of range'); }
+  if (args.length >= 4) {
+    start = parseInt(args[3]);
+    if (isNaN(start)) return encodeError('ERR value is not an integer or out of range');
+  }
+  if (args.length >= 5) {
+    stop = parseInt(args[4]);
+    if (isNaN(stop)) return encodeError('ERR value is not an integer or out of range');
+  }
   const result = await ctx.storage.jsonArrindex(key, path, value, start, stop);
   if (result === null) return encodeBulkString(null);
   return encodeInteger(result);
@@ -144,7 +151,7 @@ async function handleJsonArrinsert(ctx: HandlerContext, args: string[]): Promise
   if (isNaN(index)) return encodeError('ERR value is not an integer or out of range');
   const values = args.slice(3);
   const result = await ctx.storage.jsonArrinsert(key, path, index, values);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeInteger(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeInteger(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -176,7 +183,8 @@ async function handleJsonArrtrim(ctx: HandlerContext, args: string[]): Promise<s
   const path = args[1];
   const start = parseInt(args[2]);
   const stop = parseInt(args[3]);
-  if (isNaN(start) || isNaN(stop)) return encodeError('ERR value is not an integer or out of range');
+  if (isNaN(start) || isNaN(stop))
+    return encodeError('ERR value is not an integer or out of range');
   const result = await ctx.storage.jsonArrtrim(key, path, start, stop);
   if (result === null) return encodeBulkString(null);
   return encodeInteger(result);
@@ -207,12 +215,13 @@ async function handleJsonMget(ctx: HandlerContext, args: string[]): Promise<stri
   const path = args[args.length - 1];
   const keys = args.slice(0, args.length - 1);
   const result = await ctx.storage.jsonMget(keys, path);
-  const parts = result.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = result.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
 async function handleJsonMset(ctx: HandlerContext, args: string[]): Promise<string> {
-  if (args.length < 3 || args.length % 3 !== 0) return encodeError("wrong number of arguments for 'JSON.MSET' command");
+  if (args.length < 3 || args.length % 3 !== 0)
+    return encodeError("wrong number of arguments for 'JSON.MSET' command");
   const pairs: Array<{ key: string; path: string; value: string }> = [];
   for (let i = 0; i < args.length; i += 3) {
     pairs.push({ key: args[i], path: args[i + 1], value: args[i + 2] });
@@ -240,7 +249,8 @@ async function handleJsonDebug(ctx: HandlerContext, args: string[]): Promise<str
   if (args.length < 1) return encodeError("wrong number of arguments for 'JSON.DEBUG' command");
   const subcmd = args[0].toUpperCase();
   if (subcmd !== 'MEMORY') return encodeError('unknown subcommand');
-  if (args.length < 2) return encodeError("wrong number of arguments for 'JSON.DEBUG MEMORY' command");
+  if (args.length < 2)
+    return encodeError("wrong number of arguments for 'JSON.DEBUG MEMORY' command");
   const key = args[1];
   const path = args.length > 2 ? args[2] : undefined;
   const result = await ctx.storage.jsonDebugMemory(key, path);

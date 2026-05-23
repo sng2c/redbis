@@ -3,18 +3,23 @@ import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
 
 export const sortMethods = {
-async sort(key: string, options?: {
-    byPattern?: string;
-    limit?: { offset: number; count: number };
-    getPatterns?: string[];
-    sortOrder?: 'ASC' | 'DESC';
-    alpha?: boolean;
-    store?: string;
-  }): Promise<string[] | number> {
+  async sort(
+    key: string,
+    options?: {
+      byPattern?: string;
+      limit?: { offset: number; count: number };
+      getPatterns?: string[];
+      sortOrder?: 'ASC' | 'DESC';
+      alpha?: boolean;
+      store?: string;
+    }
+  ): Promise<string[] | number> {
     this.evictExpired(key);
 
     // Check key type
-    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+    const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as
+      | { type: string }
+      | undefined;
     assertTypeOneOf(typeRow?.type, ['list', 'set', 'zset']);
 
     // Collect elements
@@ -22,14 +27,20 @@ async sort(key: string, options?: {
     if (!typeRow) {
       elements = [];
     } else if (typeRow.type === 'list') {
-      const rows = this.db.prepare('SELECT value FROM list_store WHERE key = ? ORDER BY seq ASC').all(key) as { value: string }[];
-      elements = rows.map(r => r.value);
+      const rows = this.db
+        .prepare('SELECT value FROM list_store WHERE key = ? ORDER BY seq ASC')
+        .all(key) as { value: string }[];
+      elements = rows.map((r) => r.value);
     } else if (typeRow.type === 'set') {
-      const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(key) as { member: string }[];
-      elements = rows.map(r => r.member);
+      const rows = this.db.prepare('SELECT member FROM set_store WHERE key = ?').all(key) as {
+        member: string;
+      }[];
+      elements = rows.map((r) => r.member);
     } else if (typeRow.type === 'zset') {
-      const rows = this.db.prepare('SELECT member FROM zset_store WHERE key = ?').all(key) as { member: string }[];
-      elements = rows.map(r => r.member);
+      const rows = this.db.prepare('SELECT member FROM zset_store WHERE key = ?').all(key) as {
+        member: string;
+      }[];
+      elements = rows.map((r) => r.member);
     } else {
       elements = [];
     }
@@ -44,11 +55,11 @@ async sort(key: string, options?: {
 
     // Apply BY pattern to get sort weights
     if (options?.byPattern) {
-      const lookupKeys = elements.map(el => options.byPattern!.replace('*', el));
+      const lookupKeys = elements.map((el) => options.byPattern!.replace('*', el));
       const weights = await this.mget(lookupKeys);
       const pairs: { element: string; weight: string | null }[] = elements.map((el, i) => ({
         element: el,
-        weight: weights[i]
+        weight: weights[i],
       }));
 
       // Sort using weights
@@ -70,7 +81,7 @@ async sort(key: string, options?: {
         return sortOrder === 'DESC' ? -cmp : cmp;
       });
 
-      elements = pairs.map(p => p.element);
+      elements = pairs.map((p) => p.element);
     } else {
       // Sort by elements themselves
       const sortOrder = options?.sortOrder ?? 'ASC';
@@ -148,5 +159,4 @@ async sort(key: string, options?: {
 
     return elements;
   },
-
 };

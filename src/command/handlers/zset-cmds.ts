@@ -50,18 +50,35 @@ async function handleZadd(ctx: HandlerContext, args: string[]): Promise<string> 
     return encodeError("wrong number of arguments for 'ZADD' command");
   }
   const key = args[0];
-  let nx = false, xx = false, gt = false, lt = false, ch = false, incr = false;
+  let nx = false,
+    xx = false,
+    gt = false,
+    lt = false,
+    ch = false,
+    incr = false;
   let i = 1;
   // Parse flags
   while (i < args.length) {
     const opt = args[i].toUpperCase();
-    if (opt === 'NX') { nx = true; i++; }
-    else if (opt === 'XX') { xx = true; i++; }
-    else if (opt === 'GT') { gt = true; i++; }
-    else if (opt === 'LT') { lt = true; i++; }
-    else if (opt === 'CH') { ch = true; i++; }
-    else if (opt === 'INCR') { incr = true; i++; }
-    else break;
+    if (opt === 'NX') {
+      nx = true;
+      i++;
+    } else if (opt === 'XX') {
+      xx = true;
+      i++;
+    } else if (opt === 'GT') {
+      gt = true;
+      i++;
+    } else if (opt === 'LT') {
+      lt = true;
+      i++;
+    } else if (opt === 'CH') {
+      ch = true;
+      i++;
+    } else if (opt === 'INCR') {
+      incr = true;
+      i++;
+    } else break;
   }
   // Remaining args are score-member pairs
   const remaining = args.length - i;
@@ -79,7 +96,14 @@ async function handleZadd(ctx: HandlerContext, args: string[]): Promise<string> 
   if (incr && scoreMembers.length > 1) {
     return encodeError('ERR INCR option supports a single increment-element pair');
   }
-  const options: { nx?: boolean; xx?: boolean; gt?: boolean; lt?: boolean; ch?: boolean; incr?: boolean } = {};
+  const options: {
+    nx?: boolean;
+    xx?: boolean;
+    gt?: boolean;
+    lt?: boolean;
+    ch?: boolean;
+    incr?: boolean;
+  } = {};
   if (nx) options.nx = true;
   if (xx) options.xx = true;
   if (gt) options.gt = true;
@@ -128,15 +152,22 @@ async function handleZrange(ctx: HandlerContext, args: string[]): Promise<string
   const key = args[0];
   const min = args[1];
   const max = args[2];
-  let byScore = false, byLex = false, rev = false, withScores = false;
+  let byScore = false,
+    byLex = false,
+    rev = false,
+    withScores = false;
   let offset: number | undefined, count: number | undefined;
   for (let i = 3; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'BYSCORE') { byScore = true; }
-    else if (opt === 'BYLEX') { byLex = true; }
-    else if (opt === 'REV') { rev = true; }
-    else if (opt === 'WITHSCORES') { withScores = true; }
-    else if (opt === 'LIMIT') {
+    if (opt === 'BYSCORE') {
+      byScore = true;
+    } else if (opt === 'BYLEX') {
+      byLex = true;
+    } else if (opt === 'REV') {
+      rev = true;
+    } else if (opt === 'WITHSCORES') {
+      withScores = true;
+    } else if (opt === 'LIMIT') {
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       offset = parseInt(args[i]);
@@ -147,7 +178,13 @@ async function handleZrange(ctx: HandlerContext, args: string[]): Promise<string
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
-  const options: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number } = {};
+  const options: {
+    byScore?: boolean;
+    byLex?: boolean;
+    rev?: boolean;
+    offset?: number;
+    count?: number;
+  } = {};
   if (byScore) options.byScore = true;
   if (byLex) options.byLex = true;
   if (rev) options.rev = true;
@@ -161,7 +198,7 @@ async function handleZrange(ctx: HandlerContext, args: string[]): Promise<string
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZrevrange(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -173,7 +210,9 @@ async function handleZrevrange(ctx: HandlerContext, args: string[]): Promise<str
   const max = args[2];
   let withScores = false;
   for (let i = 3; i < args.length; i++) {
-    if (args[i].toUpperCase() === 'WITHSCORES') { withScores = true; }
+    if (args[i].toUpperCase() === 'WITHSCORES') {
+      withScores = true;
+    }
   }
   const pairs = await ctx.storage.zrange(key, min, max, { rev: true });
   if (withScores) {
@@ -183,7 +222,7 @@ async function handleZrevrange(ctx: HandlerContext, args: string[]): Promise<str
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZrangebyscore(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -197,8 +236,9 @@ async function handleZrangebyscore(ctx: HandlerContext, args: string[]): Promise
   let offset: number | undefined, count: number | undefined;
   for (let i = 3; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'WITHSCORES') { withScores = true; }
-    else if (opt === 'LIMIT') {
+    if (opt === 'WITHSCORES') {
+      withScores = true;
+    } else if (opt === 'LIMIT') {
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       offset = parseInt(args[i]);
@@ -209,7 +249,9 @@ async function handleZrangebyscore(ctx: HandlerContext, args: string[]): Promise
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
-  const options: { byScore: boolean; rev?: boolean; offset?: number; count?: number } = { byScore: true };
+  const options: { byScore: boolean; rev?: boolean; offset?: number; count?: number } = {
+    byScore: true,
+  };
   if (offset !== undefined) options.offset = offset;
   if (count !== undefined) options.count = count;
   const pairs = await ctx.storage.zrange(key, min, max, options);
@@ -220,7 +262,7 @@ async function handleZrangebyscore(ctx: HandlerContext, args: string[]): Promise
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZrevrangebyscore(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -235,8 +277,9 @@ async function handleZrevrangebyscore(ctx: HandlerContext, args: string[]): Prom
   let offset: number | undefined, count: number | undefined;
   for (let i = 3; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'WITHSCORES') { withScores = true; }
-    else if (opt === 'LIMIT') {
+    if (opt === 'WITHSCORES') {
+      withScores = true;
+    } else if (opt === 'LIMIT') {
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       offset = parseInt(args[i]);
@@ -247,7 +290,10 @@ async function handleZrevrangebyscore(ctx: HandlerContext, args: string[]): Prom
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
-  const options: { byScore: boolean; rev: boolean; offset?: number; count?: number } = { byScore: true, rev: true };
+  const options: { byScore: boolean; rev: boolean; offset?: number; count?: number } = {
+    byScore: true,
+    rev: true,
+  };
   if (offset !== undefined) options.offset = offset;
   if (count !== undefined) options.count = count;
   const pairs = await ctx.storage.zrange(key, max, min, options);
@@ -258,7 +304,7 @@ async function handleZrevrangebyscore(ctx: HandlerContext, args: string[]): Prom
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZrangebylex(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -286,7 +332,7 @@ async function handleZrangebylex(ctx: HandlerContext, args: string[]): Promise<s
   if (offset !== undefined) options.offset = offset;
   if (count !== undefined) options.count = count;
   const pairs = await ctx.storage.zrange(key, min, max, options);
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZrevrangebylex(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -311,11 +357,14 @@ async function handleZrevrangebylex(ctx: HandlerContext, args: string[]): Promis
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
-  const options: { byLex: boolean; rev: boolean; offset?: number; count?: number } = { byLex: true, rev: true };
+  const options: { byLex: boolean; rev: boolean; offset?: number; count?: number } = {
+    byLex: true,
+    rev: true,
+  };
   if (offset !== undefined) options.offset = offset;
   if (count !== undefined) options.count = count;
   const pairs = await ctx.storage.zrange(key, max, min, options);
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZrank(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -496,7 +545,7 @@ async function handleZrandmember(ctx: HandlerContext, args: string[]): Promise<s
     }
     return encodeArray(flat);
   }
-  return encodeArray(result.map(p => p.member));
+  return encodeArray(result.map((p) => p.member));
 }
 
 async function handleZmscore(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -506,7 +555,7 @@ async function handleZmscore(ctx: HandlerContext, args: string[]): Promise<strin
   const key = args[0];
   const members = args.slice(1);
   const results = await ctx.storage.zmscore(key, members);
-  const parts = results.map(r => r === null ? encodeBulkString(null) : encodeBulkString(r));
+  const parts = results.map((r) => (r === null ? encodeBulkString(null) : encodeBulkString(r)));
   return `*${parts.length}\r\n${parts.join('')}`;
 }
 
@@ -518,14 +567,19 @@ async function handleZrangestore(ctx: HandlerContext, args: string[]): Promise<s
   const source = args[1];
   const min = args[2];
   const max = args[3];
-  let byScore = false, byLex = false, rev = false;
+  let byScore = false,
+    byLex = false,
+    rev = false;
   let offset: number | undefined, count: number | undefined;
   for (let i = 4; i < args.length; i++) {
     const opt = args[i].toUpperCase();
-    if (opt === 'BYSCORE') { byScore = true; }
-    else if (opt === 'BYLEX') { byLex = true; }
-    else if (opt === 'REV') { rev = true; }
-    else if (opt === 'LIMIT') {
+    if (opt === 'BYSCORE') {
+      byScore = true;
+    } else if (opt === 'BYLEX') {
+      byLex = true;
+    } else if (opt === 'REV') {
+      rev = true;
+    } else if (opt === 'LIMIT') {
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       offset = parseInt(args[i]);
@@ -536,7 +590,13 @@ async function handleZrangestore(ctx: HandlerContext, args: string[]): Promise<s
       if (isNaN(count)) return encodeError('ERR value is not an integer or out of range');
     }
   }
-  const options: { byScore?: boolean; byLex?: boolean; rev?: boolean; offset?: number; count?: number } = {};
+  const options: {
+    byScore?: boolean;
+    byLex?: boolean;
+    rev?: boolean;
+    offset?: number;
+    count?: number;
+  } = {};
   if (byScore) options.byScore = true;
   if (byLex) options.byLex = true;
   if (rev) options.rev = true;
@@ -572,7 +632,7 @@ async function handleZdiff(ctx: HandlerContext, args: string[]): Promise<string>
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZdiffstore(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -640,7 +700,7 @@ async function handleZunion(ctx: HandlerContext, args: string[]): Promise<string
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZunionstore(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -733,7 +793,7 @@ async function handleZinter(ctx: HandlerContext, args: string[]): Promise<string
     }
     return encodeArray(flat);
   }
-  return encodeArray(pairs.map(p => p.member));
+  return encodeArray(pairs.map((p) => p.member));
 }
 
 async function handleZinterstore(ctx: HandlerContext, args: string[]): Promise<string> {
@@ -855,7 +915,8 @@ async function handleBzmpop(ctx: HandlerContext, args: string[]): Promise<string
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
-      if (isNaN(count) || count <= 0) return encodeError('ERR value is not an integer or out of range');
+      if (isNaN(count) || count <= 0)
+        return encodeError('ERR value is not an integer or out of range');
     }
   }
   if (!minmax) {
@@ -894,7 +955,8 @@ async function handleZmpop(ctx: HandlerContext, args: string[]): Promise<string>
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
-      if (isNaN(count) || count <= 0) return encodeError('ERR value is not an integer or out of range');
+      if (isNaN(count) || count <= 0)
+        return encodeError('ERR value is not an integer or out of range');
     }
   }
   if (!minmax) {

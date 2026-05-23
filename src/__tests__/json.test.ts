@@ -526,7 +526,15 @@ describe('JSON 명령어 — InMemoryStorage', () => {
   // --- JSON.MSET ---
   describe('JSON.MSET 명령어', () => {
     it('여러 키/경로에 JSON 값을 설정한다', async () => {
-      const result = await handler.execute(['JSON.MSET', 'key1', '$', '{"a":1}', 'key2', '$', '{"b":2}']);
+      const result = await handler.execute([
+        'JSON.MSET',
+        'key1',
+        '$',
+        '{"a":1}',
+        'key2',
+        '$',
+        '{"b":2}',
+      ]);
       expect(result).toBe('+OK\r\n');
       const r1 = await handler.execute(['JSON.GET', 'key1']);
       const r2 = await handler.execute(['JSON.GET', 'key2']);
@@ -921,7 +929,15 @@ describe('JSON 명령어 — SqliteStorage', () => {
   // --- JSON.MSET ---
   describe('JSON.MSET 명령어', () => {
     it('여러 키/경로에 JSON 값을 설정한다', async () => {
-      const result = await handler.execute(['JSON.MSET', 'key1', '$', '{"a":1}', 'key2', '$', '{"b":2}']);
+      const result = await handler.execute([
+        'JSON.MSET',
+        'key1',
+        '$',
+        '{"a":1}',
+        'key2',
+        '$',
+        '{"b":2}',
+      ]);
       expect(result).toBe('+OK\r\n');
     });
   });

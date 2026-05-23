@@ -1,9 +1,5 @@
 import { HandlerContext, CommandFn } from '../context';
-import {
-  encodeSimpleString,
-  encodeError,
-  encodeRawArray,
-} from '../../protocol/resp';
+import { encodeSimpleString, encodeError, encodeRawArray } from '../../protocol/resp';
 
 export function registerTransactionCommands(registry: Map<string, CommandFn>): void {
   registry.set('MULTI', handleMulti);

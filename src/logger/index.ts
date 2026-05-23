@@ -27,7 +27,14 @@ export class Logger {
       module: this.module,
       message,
     };
-    if (data !== undefined && !(typeof data === 'object' && data !== null && Object.keys(data as Record<string, unknown>).length === 0)) {
+    if (
+      data !== undefined &&
+      !(
+        typeof data === 'object' &&
+        data !== null &&
+        Object.keys(data as Record<string, unknown>).length === 0
+      )
+    ) {
       entry.data = data;
     }
     process.stdout.write(JSON.stringify(entry) + '\n');

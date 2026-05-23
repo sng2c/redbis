@@ -1,26 +1,45 @@
 // @ts-nocheck
 import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
 import type { SqliteStorage } from './core';
-import { encodeGeohash, decodeGeohash, geohashToString, calculateDistance, getBoundingBox, isInRadius, convertToMeters, convertFromMeters } from '../../utils/geo';
+import {
+  encodeGeohash,
+  decodeGeohash,
+  geohashToString,
+  calculateDistance,
+  getBoundingBox,
+  isInRadius,
+  convertToMeters,
+  convertFromMeters,
+} from '../../utils/geo';
 import type { GeoSearchResult } from '../../utils/geo';
 
 export const geoMethods = {
-_ensureGeoTypeOrThrow(key: string): void {
-    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as { type: string } | undefined;
+  _ensureGeoTypeOrThrow(key: string): void {
+    const row = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(key) as
+      | { type: string }
+      | undefined;
     assertType(row?.type, 'zset');
   },
 
-_unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {
+  _unitToMeters(unit: 'm' | 'km' | 'ft' | 'mi'): number {
     switch (unit) {
-      case 'km': return 1000;
-      case 'ft': return 0.3048;
-      case 'mi': return 1609.34;
+      case 'km':
+        return 1000;
+      case 'ft':
+        return 0.3048;
+      case 'mi':
+        return 1609.34;
       case 'm':
-      default: return 1;
+      default:
+        return 1;
     }
   },
 
-async geoadd(key: string, members: Array<{ longitude: number; latitude: number; member: string }>, options?: { nx?: boolean; xx?: boolean; ch?: boolean }): Promise<number> {
+  async geoadd(
+    key: string,
+    members: Array<{ longitude: number; latitude: number; member: string }>,
+    options?: { nx?: boolean; xx?: boolean; ch?: boolean }
+  ): Promise<number> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
@@ -44,8 +63,12 @@ async geoadd(key: string, members: Array<{ longitude: number; latitude: number; 
     const tx = this.db.transaction(() => {
       for (const { longitude, latitude, member } of members) {
         const hash = encodeGeohash(longitude, latitude);
-        const existingRow = this.db.prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?').get(key, member) as { score: number } | undefined;
-        const existingGeoRow = this.db.prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?').get(key, member) as { longitude: number; latitude: number } | undefined;
+        const existingRow = this.db
+          .prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?')
+          .get(key, member) as { score: number } | undefined;
+        const existingGeoRow = this.db
+          .prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?')
+          .get(key, member) as { longitude: number; latitude: number } | undefined;
 
         if (existingRow) {
           // Member already exists
@@ -55,27 +78,48 @@ async geoadd(key: string, members: Array<{ longitude: number; latitude: number; 
             if (existingRow.score !== hash) {
               changed++;
             }
-            this.db.prepare('UPDATE zset_store SET score = ? WHERE key = ? AND member = ?').run(hash, key, member);
-            this.db.prepare('INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)').run(key, member, longitude, latitude);
+            this.db
+              .prepare('UPDATE zset_store SET score = ? WHERE key = ? AND member = ?')
+              .run(hash, key, member);
+            this.db
+              .prepare(
+                'INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)'
+              )
+              .run(key, member, longitude, latitude);
           } else {
             // Default: update
             if (existingRow.score !== hash) {
               changed++;
             }
             // Also check if coordinates changed even if geohash is the same
-            if (existingRow.score === hash && existingGeoRow &&
-                (existingGeoRow.longitude !== longitude || existingGeoRow.latitude !== latitude)) {
+            if (
+              existingRow.score === hash &&
+              existingGeoRow &&
+              (existingGeoRow.longitude !== longitude || existingGeoRow.latitude !== latitude)
+            ) {
               changed++;
             }
-            this.db.prepare('UPDATE zset_store SET score = ? WHERE key = ? AND member = ?').run(hash, key, member);
-            this.db.prepare('INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)').run(key, member, longitude, latitude);
+            this.db
+              .prepare('UPDATE zset_store SET score = ? WHERE key = ? AND member = ?')
+              .run(hash, key, member);
+            this.db
+              .prepare(
+                'INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)'
+              )
+              .run(key, member, longitude, latitude);
           }
         } else {
           // Member doesn't exist
           if (options?.xx) continue; // XX: only update existing members
           this._ensureZsetKvStoreEntry(key);
-          this.db.prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)').run(key, member, hash);
-          this.db.prepare('INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)').run(key, member, longitude, latitude);
+          this.db
+            .prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)')
+            .run(key, member, hash);
+          this.db
+            .prepare(
+              'INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)'
+            )
+            .run(key, member, longitude, latitude);
           added++;
         }
       }
@@ -85,30 +129,36 @@ async geoadd(key: string, members: Array<{ longitude: number; latitude: number; 
     return options?.ch ? added + changed : added;
   },
 
-async geohash(key: string, members: string[]): Promise<(string | null)[]> {
+  async geohash(key: string, members: string[]): Promise<(string | null)[]> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
-    const zsetRows = this.db.prepare('SELECT member, score FROM zset_store WHERE key = ?').all(key) as { member: string; score: number }[];
-    const zsetMap = new Map(zsetRows.map(r => [r.member, r.score] as [string, number]));
+    const zsetRows = this.db
+      .prepare('SELECT member, score FROM zset_store WHERE key = ?')
+      .all(key) as { member: string; score: number }[];
+    const zsetMap = new Map(zsetRows.map((r) => [r.member, r.score] as [string, number]));
 
-    return members.map(member => {
+    return members.map((member) => {
       const score = zsetMap.get(member);
       if (score === undefined) return null;
       return geohashToString(score);
     });
   },
 
-async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> {
+  async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
-    return members.map(member => {
-      const geoRow = this.db.prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?').get(key, member) as { longitude: number; latitude: number } | undefined;
+    return members.map((member) => {
+      const geoRow = this.db
+        .prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?')
+        .get(key, member) as { longitude: number; latitude: number } | undefined;
       if (geoRow) {
         return [geoRow.longitude, geoRow.latitude];
       }
       // Fallback: decode from zset score
-      const zsetRow = this.db.prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?').get(key, member) as { score: number } | undefined;
+      const zsetRow = this.db
+        .prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?')
+        .get(key, member) as { score: number } | undefined;
       if (zsetRow) {
         const coords = decodeGeohash(zsetRow.score);
         return [coords.longitude, coords.latitude];
@@ -117,14 +167,23 @@ async geopos(key: string, members: string[]): Promise<(Array<number> | null)[]> 
     });
   },
 
-async geodist(key: string, member1: string, member2: string, unit: 'm' | 'km' | 'ft' | 'mi' = 'm'): Promise<number | null> {
+  async geodist(
+    key: string,
+    member1: string,
+    member2: string,
+    unit: 'm' | 'km' | 'ft' | 'mi' = 'm'
+  ): Promise<number | null> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
     const getCoords = (member: string): { longitude: number; latitude: number } | null => {
-      const geoRow = this.db.prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?').get(key, member) as { longitude: number; latitude: number } | undefined;
+      const geoRow = this.db
+        .prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?')
+        .get(key, member) as { longitude: number; latitude: number } | undefined;
       if (geoRow) return geoRow;
-      const zsetRow = this.db.prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?').get(key, member) as { score: number } | undefined;
+      const zsetRow = this.db
+        .prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?')
+        .get(key, member) as { score: number } | undefined;
       if (zsetRow) return decodeGeohash(zsetRow.score);
       return null;
     };
@@ -133,10 +192,31 @@ async geodist(key: string, member1: string, member2: string, unit: 'm' | 'km' | 
     const coord2 = getCoords(member2);
     if (!coord1 || !coord2) return null;
 
-    return calculateDistance(coord1.longitude, coord1.latitude, coord2.longitude, coord2.latitude, unit);
+    return calculateDistance(
+      coord1.longitude,
+      coord1.latitude,
+      coord2.longitude,
+      coord2.latitude,
+      unit
+    );
   },
 
-async georadius(key: string, longitude: number, latitude: number, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]> {
+  async georadius(
+    key: string,
+    longitude: number,
+    latitude: number,
+    radius: number,
+    unit: 'm' | 'km' | 'ft' | 'mi',
+    options?: {
+      withCoord?: boolean;
+      withDist?: boolean;
+      withHash?: boolean;
+      count?: number;
+      sort?: 'ASC' | 'DESC';
+      store?: string;
+      storeDist?: string;
+    }
+  ): Promise<GeoSearchResult[]> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
@@ -147,9 +227,16 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
     const bbox = getBoundingBox(longitude, latitude, radiusMeters);
 
     // Query geo_store + zset_store with bounding box filter
-    const rows = this.db.prepare(
-      'SELECT g.member, g.longitude, g.latitude, z.score FROM geo_store g JOIN zset_store z ON g.key = z.key AND g.member = z.member WHERE g.key = ? AND g.longitude BETWEEN ? AND ? AND g.latitude BETWEEN ? AND ?'
-    ).all(key, bbox.minLon, bbox.maxLon, bbox.minLat, bbox.maxLat) as { member: string; longitude: number; latitude: number; score: number }[];
+    const rows = this.db
+      .prepare(
+        'SELECT g.member, g.longitude, g.latitude, z.score FROM geo_store g JOIN zset_store z ON g.key = z.key AND g.member = z.member WHERE g.key = ? AND g.longitude BETWEEN ? AND ? AND g.latitude BETWEEN ? AND ?'
+      )
+      .all(key, bbox.minLon, bbox.maxLon, bbox.minLat, bbox.maxLat) as {
+      member: string;
+      longitude: number;
+      latitude: number;
+      score: number;
+    }[];
 
     // Filter with isInRadius for circular precision and build results
     let results: GeoSearchResult[] = [];
@@ -172,10 +259,20 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
 
     // Sort by distance
     results.sort((a, b) => {
-      const distA = calculateDistance(longitude, latitude,
-        this._getGeoCoords(key, a.member)!.longitude, this._getGeoCoords(key, a.member)!.latitude, 'm');
-      const distB = calculateDistance(longitude, latitude,
-        this._getGeoCoords(key, b.member)!.longitude, this._getGeoCoords(key, b.member)!.latitude, 'm');
+      const distA = calculateDistance(
+        longitude,
+        latitude,
+        this._getGeoCoords(key, a.member)!.longitude,
+        this._getGeoCoords(key, a.member)!.latitude,
+        'm'
+      );
+      const distB = calculateDistance(
+        longitude,
+        latitude,
+        this._getGeoCoords(key, b.member)!.longitude,
+        this._getGeoCoords(key, b.member)!.latitude,
+        'm'
+      );
       return sort === 'ASC' ? distA - distB : distB - distA;
     });
 
@@ -193,9 +290,15 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
         this.db.prepare('DELETE FROM zset_store WHERE key = ?').run(destKey);
         this.db.prepare('DELETE FROM geo_store WHERE key = ?').run(destKey);
         for (const r of results) {
-          this.db.prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)').run(destKey, r.member, r.score);
+          this.db
+            .prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)')
+            .run(destKey, r.member, r.score);
           const coords = this._getGeoCoords(key, r.member)!;
-          this.db.prepare('INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)').run(destKey, r.member, coords.longitude, coords.latitude);
+          this.db
+            .prepare(
+              'INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)'
+            )
+            .run(destKey, r.member, coords.longitude, coords.latitude);
         }
       });
       tx();
@@ -208,9 +311,18 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
       const tx = this.db.transaction(() => {
         this.db.prepare('DELETE FROM zset_store WHERE key = ?').run(destKey);
         for (const r of results) {
-          const dist = r.distance ?? calculateDistance(longitude, latitude,
-            this._getGeoCoords(key, r.member)!.longitude, this._getGeoCoords(key, r.member)!.latitude, unit);
-          this.db.prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)').run(destKey, r.member, dist);
+          const dist =
+            r.distance ??
+            calculateDistance(
+              longitude,
+              latitude,
+              this._getGeoCoords(key, r.member)!.longitude,
+              this._getGeoCoords(key, r.member)!.latitude,
+              unit
+            );
+          this.db
+            .prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)')
+            .run(destKey, r.member, dist);
         }
       });
       tx();
@@ -219,7 +331,21 @@ async georadius(key: string, longitude: number, latitude: number, radius: number
     return results;
   },
 
-async georadiusbymember(key: string, member: string, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]> {
+  async georadiusbymember(
+    key: string,
+    member: string,
+    radius: number,
+    unit: 'm' | 'km' | 'ft' | 'mi',
+    options?: {
+      withCoord?: boolean;
+      withDist?: boolean;
+      withHash?: boolean;
+      count?: number;
+      sort?: 'ASC' | 'DESC';
+      store?: string;
+      storeDist?: string;
+    }
+  ): Promise<GeoSearchResult[]> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
@@ -229,7 +355,22 @@ async georadiusbymember(key: string, member: string, radius: number, unit: 'm' |
     return this.georadius(key, coords.longitude, coords.latitude, radius, unit, options);
   },
 
-async geosearch(key: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean }): Promise<GeoSearchResult[]> {
+  async geosearch(
+    key: string,
+    options: {
+      fromMember?: string;
+      fromLongitude?: number;
+      fromLatitude?: number;
+      byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      sort?: 'ASC' | 'DESC';
+      count?: number;
+      any?: boolean;
+      withCoord?: boolean;
+      withDist?: boolean;
+      withHash?: boolean;
+    }
+  ): Promise<GeoSearchResult[]> {
     this.evictExpired(key);
     this._ensureGeoTypeOrThrow(key);
 
@@ -253,16 +394,29 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
       const radiusMeters = options.byRadius.radius * this._unitToMeters(options.byRadius.unit);
       const bbox = getBoundingBox(centerLon, centerLat, radiusMeters);
 
-      const rows = this.db.prepare(
-        'SELECT g.member, g.longitude, g.latitude, z.score FROM geo_store g JOIN zset_store z ON g.key = z.key AND g.member = z.member WHERE g.key = ? AND g.longitude BETWEEN ? AND ? AND g.latitude BETWEEN ? AND ?'
-      ).all(key, bbox.minLon, bbox.maxLon, bbox.minLat, bbox.maxLat) as { member: string; longitude: number; latitude: number; score: number }[];
+      const rows = this.db
+        .prepare(
+          'SELECT g.member, g.longitude, g.latitude, z.score FROM geo_store g JOIN zset_store z ON g.key = z.key AND g.member = z.member WHERE g.key = ? AND g.longitude BETWEEN ? AND ? AND g.latitude BETWEEN ? AND ?'
+        )
+        .all(key, bbox.minLon, bbox.maxLon, bbox.minLat, bbox.maxLat) as {
+        member: string;
+        longitude: number;
+        latitude: number;
+        score: number;
+      }[];
 
       for (const row of rows) {
         if (!isInRadius(centerLon, centerLat, radiusMeters, row.longitude, row.latitude)) continue;
 
         const result: GeoSearchResult = { member: row.member, score: row.score };
         if (options.withDist) {
-          result.distance = calculateDistance(centerLon, centerLat, row.longitude, row.latitude, options.byRadius.unit);
+          result.distance = calculateDistance(
+            centerLon,
+            centerLat,
+            row.longitude,
+            row.latitude,
+            options.byRadius.unit
+          );
         }
         if (options.withCoord) {
           result.longitude = row.longitude;
@@ -280,7 +434,7 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
       const halfWidthM = widthMeters / 2;
 
       const latDegPerM = 1 / 110540;
-      const lonDegPerM = 1 / (111320 * Math.cos(centerLat * Math.PI / 180));
+      const lonDegPerM = 1 / (111320 * Math.cos((centerLat * Math.PI) / 180));
       const bbox = {
         minLon: centerLon - halfWidthM * lonDegPerM,
         maxLon: centerLon + halfWidthM * lonDegPerM,
@@ -288,14 +442,27 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
         maxLat: centerLat + halfHeightM * latDegPerM,
       };
 
-      const rows = this.db.prepare(
-        'SELECT g.member, g.longitude, g.latitude, z.score FROM geo_store g JOIN zset_store z ON g.key = z.key AND g.member = z.member WHERE g.key = ? AND g.longitude BETWEEN ? AND ? AND g.latitude BETWEEN ? AND ?'
-      ).all(key, bbox.minLon, bbox.maxLon, bbox.minLat, bbox.maxLat) as { member: string; longitude: number; latitude: number; score: number }[];
+      const rows = this.db
+        .prepare(
+          'SELECT g.member, g.longitude, g.latitude, z.score FROM geo_store g JOIN zset_store z ON g.key = z.key AND g.member = z.member WHERE g.key = ? AND g.longitude BETWEEN ? AND ? AND g.latitude BETWEEN ? AND ?'
+        )
+        .all(key, bbox.minLon, bbox.maxLon, bbox.minLat, bbox.maxLat) as {
+        member: string;
+        longitude: number;
+        latitude: number;
+        score: number;
+      }[];
 
       for (const row of rows) {
         const result: GeoSearchResult = { member: row.member, score: row.score };
         if (options.withDist) {
-          result.distance = calculateDistance(centerLon, centerLat, row.longitude, row.latitude, options.byBox.unit);
+          result.distance = calculateDistance(
+            centerLon,
+            centerLat,
+            row.longitude,
+            row.latitude,
+            options.byBox.unit
+          );
         }
         if (options.withCoord) {
           result.longitude = row.longitude;
@@ -313,10 +480,20 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
     // Sort by distance
     const sort = options.sort ?? 'ASC';
     results.sort((a, b) => {
-      const distA = calculateDistance(centerLon, centerLat,
-        this._getGeoCoords(key, a.member)!.longitude, this._getGeoCoords(key, a.member)!.latitude, 'm');
-      const distB = calculateDistance(centerLon, centerLat,
-        this._getGeoCoords(key, b.member)!.longitude, this._getGeoCoords(key, b.member)!.latitude, 'm');
+      const distA = calculateDistance(
+        centerLon,
+        centerLat,
+        this._getGeoCoords(key, a.member)!.longitude,
+        this._getGeoCoords(key, a.member)!.latitude,
+        'm'
+      );
+      const distB = calculateDistance(
+        centerLon,
+        centerLat,
+        this._getGeoCoords(key, b.member)!.longitude,
+        this._getGeoCoords(key, b.member)!.latitude,
+        'm'
+      );
       return sort === 'ASC' ? distA - distB : distB - distA;
     });
 
@@ -328,7 +505,21 @@ async geosearch(key: string, options: { fromMember?: string; fromLongitude?: num
     return results;
   },
 
-async geosearchstore(destination: string, source: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean }): Promise<number> {
+  async geosearchstore(
+    destination: string,
+    source: string,
+    options: {
+      fromMember?: string;
+      fromLongitude?: number;
+      fromLatitude?: number;
+      byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' };
+      sort?: 'ASC' | 'DESC';
+      count?: number;
+      any?: boolean;
+      storeDist?: boolean;
+    }
+  ): Promise<number> {
     this.evictExpired(destination);
     this.evictExpired(source);
 
@@ -347,7 +538,9 @@ async geosearchstore(destination: string, source: string, options: { fromMember?
 
     if (searchResults.length === 0) {
       // Clean up destination if it exists as zset
-      const typeRow = this.db.prepare('SELECT type FROM kv_store WHERE key = ?').get(destination) as { type: string } | undefined;
+      const typeRow = this.db
+        .prepare('SELECT type FROM kv_store WHERE key = ?')
+        .get(destination) as { type: string } | undefined;
       if (typeRow && typeRow.type === 'zset') {
         this.db.prepare('DELETE FROM zset_store WHERE key = ?').run(destination);
         this.db.prepare('DELETE FROM geo_store WHERE key = ?').run(destination);
@@ -366,18 +559,32 @@ async geosearchstore(destination: string, source: string, options: { fromMember?
       for (const r of searchResults) {
         if (options.storeDist) {
           const dist = r.distance ?? 0;
-          this.db.prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)').run(destination, r.member, dist);
+          this.db
+            .prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)')
+            .run(destination, r.member, dist);
         } else {
-          this.db.prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)').run(destination, r.member, r.score);
+          this.db
+            .prepare('INSERT OR REPLACE INTO zset_store (key, member, score) VALUES (?, ?, ?)')
+            .run(destination, r.member, r.score);
         }
         // Store coordinates in geo_store
         if (r.longitude !== undefined && r.latitude !== undefined) {
-          this.db.prepare('INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)').run(destination, r.member, r.longitude, r.latitude);
+          this.db
+            .prepare(
+              'INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)'
+            )
+            .run(destination, r.member, r.longitude, r.latitude);
         } else {
           // Fallback to source geo_store lookup
-          const srcGeo = this.db.prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?').get(source, r.member) as { longitude: number; latitude: number } | undefined;
+          const srcGeo = this.db
+            .prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?')
+            .get(source, r.member) as { longitude: number; latitude: number } | undefined;
           if (srcGeo) {
-            this.db.prepare('INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)').run(destination, r.member, srcGeo.longitude, srcGeo.latitude);
+            this.db
+              .prepare(
+                'INSERT OR REPLACE INTO geo_store (key, member, longitude, latitude) VALUES (?, ?, ?, ?)'
+              )
+              .run(destination, r.member, srcGeo.longitude, srcGeo.latitude);
           }
         }
       }
@@ -387,12 +594,15 @@ async geosearchstore(destination: string, source: string, options: { fromMember?
     return searchResults.length;
   },
 
-_getGeoCoords(key: string, member: string): { longitude: number; latitude: number } | null {
-    const geoRow = this.db.prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?').get(key, member) as { longitude: number; latitude: number } | undefined;
+  _getGeoCoords(key: string, member: string): { longitude: number; latitude: number } | null {
+    const geoRow = this.db
+      .prepare('SELECT longitude, latitude FROM geo_store WHERE key = ? AND member = ?')
+      .get(key, member) as { longitude: number; latitude: number } | undefined;
     if (geoRow) return geoRow;
-    const zsetRow = this.db.prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?').get(key, member) as { score: number } | undefined;
+    const zsetRow = this.db
+      .prepare('SELECT score FROM zset_store WHERE key = ? AND member = ?')
+      .get(key, member) as { score: number } | undefined;
     if (zsetRow) return decodeGeohash(zsetRow.score);
     return null;
   },
-
 };

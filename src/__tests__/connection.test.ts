@@ -54,7 +54,11 @@ function sendCommand(client: net.Socket, command: string): Promise<void> {
   });
 }
 
-function collectResponses(client: net.Socket, expectedCount: number, timeoutMs: number = 3000): Promise<string[]> {
+function collectResponses(
+  client: net.Socket,
+  expectedCount: number,
+  timeoutMs: number = 3000
+): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const responses: string[] = [];
     let buffer = '';
@@ -68,7 +72,9 @@ function collectResponses(client: net.Socket, expectedCount: number, timeoutMs: 
         if (buffer.length > 0) {
           resolve(splitResponses(buffer));
         } else {
-          reject(new Error(`Timeout: expected ${expectedCount} responses, got ${responses.length}`));
+          reject(
+            new Error(`Timeout: expected ${expectedCount} responses, got ${responses.length}`)
+          );
         }
       }
     }, timeoutMs);
@@ -128,12 +134,21 @@ function splitResponses(data: string): string[] {
       let pos = idx + 2;
       let valid = true;
       for (let i = 0; i < count; i++) {
-        if (pos >= remaining.length) { valid = false; break; }
+        if (pos >= remaining.length) {
+          valid = false;
+          break;
+        }
         if (remaining[pos] === '$') {
           const lenIdx = remaining.indexOf('\r\n', pos);
-          if (lenIdx === -1) { valid = false; break; }
+          if (lenIdx === -1) {
+            valid = false;
+            break;
+          }
           const blen = parseInt(remaining.substring(pos + 1, lenIdx), 10);
-          if (isNaN(blen)) { valid = false; break; }
+          if (isNaN(blen)) {
+            valid = false;
+            break;
+          }
           if (blen === -1) {
             pos = lenIdx + 2;
           } else {
@@ -141,10 +156,14 @@ function splitResponses(data: string): string[] {
           }
         } else if (remaining[pos] === '+' || remaining[pos] === '-' || remaining[pos] === ':') {
           const eolIdx = remaining.indexOf('\r\n', pos);
-          if (eolIdx === -1) { valid = false; break; }
+          if (eolIdx === -1) {
+            valid = false;
+            break;
+          }
           pos = eolIdx + 2;
         } else {
-          valid = false; break;
+          valid = false;
+          break;
         }
       }
       if (!valid || pos > remaining.length) break;
@@ -320,7 +339,11 @@ describe('handleConnection', () => {
     // Client 3: PING
     const response3_p = sendAndReceive(client3, 'PING\r\n');
 
-    const [response1, response2, response3] = await Promise.all([response1_p, response2_p, response3_p]);
+    const [response1, response2, response3] = await Promise.all([
+      response1_p,
+      response2_p,
+      response3_p,
+    ]);
 
     expect(response1).toBe('+OK\r\n');
     expect(response2).toBe('+OK\r\n');

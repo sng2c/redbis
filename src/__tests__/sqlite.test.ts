@@ -122,11 +122,11 @@ describe('SqliteStorage', () => {
     it('작은따옴표, 세미콜론, 대시 등 SQL 특수문자가 포함된 값을 정확히 저장·조회한다', async () => {
       const specialValues = [
         "value with 'quotes'",
-        "value; DROP TABLE kv_store; --",
-        "OR 1=1",
-        "-- comment",
+        'value; DROP TABLE kv_store; --',
+        'OR 1=1',
+        '-- comment',
         "'; --",
-        "normal_value",
+        'normal_value',
       ];
       for (const val of specialValues) {
         const key = `key_${val.length}`;
@@ -139,12 +139,7 @@ describe('SqliteStorage', () => {
 
   describe('SQL 특수문자 포함 키의 set/get/delete', () => {
     it('작은따옴표, 세미콜론 등이 포함된 키로 set/get/delete가 정확히 동작한다', async () => {
-      const specialKeys = [
-        "key'with'quotes",
-        "key;semicolon",
-        "key--dash",
-        "key OR 1=1",
-      ];
+      const specialKeys = ["key'with'quotes", 'key;semicolon', 'key--dash', 'key OR 1=1'];
       for (const key of specialKeys) {
         await storage.set(key, `value_of_${key}`);
       }
@@ -270,46 +265,74 @@ describe('SqliteStorage', () => {
     });
 
     it('GEOADD 중복 멤버는 스코어를 갱신한다', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
-      const result = await storage.geoadd('cities', [{ longitude: 15.087269, latitude: 37.502669, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
+      const result = await storage.geoadd('cities', [
+        { longitude: 15.087269, latitude: 37.502669, member: 'Palermo' },
+      ]);
       expect(result).toBe(0);
     });
 
     it('GEOADD with CH 옵션', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
-      const result = await storage.geoadd('cities', [{ longitude: 14.361389, latitude: 39.115556, member: 'Palermo' }], { ch: true });
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
+      const result = await storage.geoadd(
+        'cities',
+        [{ longitude: 14.361389, latitude: 39.115556, member: 'Palermo' }],
+        { ch: true }
+      );
       expect(result).toBe(1);
     });
 
     it('GEOADD with NX 옵션은 기존 멤버를 건너뛴다', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
-      const result = await storage.geoadd('cities', [{ longitude: 15, latitude: 37, member: 'Palermo' }], { nx: true });
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
+      const result = await storage.geoadd(
+        'cities',
+        [{ longitude: 15, latitude: 37, member: 'Palermo' }],
+        { nx: true }
+      );
       expect(result).toBe(0);
     });
 
     it('GEOADD with XX 옵션은 기존 멤버만 갱신한다', async () => {
-      const result = await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }], { xx: true });
+      const result = await storage.geoadd(
+        'cities',
+        [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }],
+        { xx: true }
+      );
       expect(result).toBe(0);
     });
 
     it('GEOADD 잘못된 경도는 에러를 던진다', async () => {
-      await expect(storage.geoadd('cities', [{ longitude: 181, latitude: 38, member: 'm' }])).rejects.toThrow();
+      await expect(
+        storage.geoadd('cities', [{ longitude: 181, latitude: 38, member: 'm' }])
+      ).rejects.toThrow();
     });
 
     it('GEOHASH로 geohash 문자열을 반환한다', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
       const result = await storage.geohash('cities', ['Palermo']);
       expect(result[0]).not.toBeNull();
     });
 
     it('GEOHASH 존재하지 않는 멤버는 null', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
       const result = await storage.geohash('cities', ['Unknown']);
       expect(result[0]).toBeNull();
     });
 
     it('GEOPOS로 멤버의 경도/위도를 반환한다', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
       const result = await storage.geopos('cities', ['Palermo']);
       expect(result[0]).not.toBeNull();
       expect(result[0]![0]).toBeCloseTo(13.361389, 1);
@@ -333,7 +356,9 @@ describe('SqliteStorage', () => {
     });
 
     it('GEODIST 존재하지 않는 멤버는 null', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
       const result = await storage.geodist('cities', 'Palermo', 'Unknown', 'km');
       expect(result).toBeNull();
     });
@@ -345,7 +370,7 @@ describe('SqliteStorage', () => {
       ]);
       const results = await storage.georadius('cities', 13.361389, 38.115556, 200, 'km');
       expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(results.some(r => r.member === 'Palermo')).toBe(true);
+      expect(results.some((r) => r.member === 'Palermo')).toBe(true);
     });
 
     it('GEORADIUSBYMEMBER로 멤버 기반 반경 검색한다', async () => {
@@ -363,7 +388,8 @@ describe('SqliteStorage', () => {
         { longitude: 15.087269, latitude: 37.502669, member: 'Catania' },
       ]);
       const results = await storage.geosearch('cities', {
-        fromLongitude: 13.361389, fromLatitude: 38.115556,
+        fromLongitude: 13.361389,
+        fromLatitude: 38.115556,
         byRadius: { radius: 200, unit: 'km' },
       });
       expect(results.length).toBeGreaterThanOrEqual(1);
@@ -382,9 +408,12 @@ describe('SqliteStorage', () => {
     });
 
     it('GEOSEARCH BYBOX로 사각형 검색한다', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
       const results = await storage.geosearch('cities', {
-        fromLongitude: 13.361389, fromLatitude: 38.115556,
+        fromLongitude: 13.361389,
+        fromLatitude: 38.115556,
         byBox: { width: 400, height: 400, unit: 'km' },
       });
       expect(results.length).toBeGreaterThanOrEqual(1);
@@ -405,7 +434,9 @@ describe('SqliteStorage', () => {
     });
 
     it('GEOSEARCH withCoord 옵션', async () => {
-      await storage.geoadd('cities', [{ longitude: 13.361389, latitude: 38.115556, member: 'Palermo' }]);
+      await storage.geoadd('cities', [
+        { longitude: 13.361389, latitude: 38.115556, member: 'Palermo' },
+      ]);
       const results = await storage.geosearch('cities', {
         fromMember: 'Palermo',
         byRadius: { radius: 200, unit: 'km' },

@@ -6,7 +6,16 @@ export interface InternalStreamGroup {
   name: string;
   lastDeliveredId: string;
   entriesRead: number;
-  consumers: Map<string, { name: string; seenTime: number; pendingCount: number; lastDeliveredId: string; lastAckTime: number }>;
+  consumers: Map<
+    string,
+    {
+      name: string;
+      seenTime: number;
+      pendingCount: number;
+      lastDeliveredId: string;
+      lastAckTime: number;
+    }
+  >;
   pending: PendingEntry[];
 }
 

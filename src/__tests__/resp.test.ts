@@ -52,7 +52,7 @@ describe('RESP 인코딩', () => {
     });
 
     it('한글 문자열을 bulk string으로 인코딩한다', () => {
-      expect(encodeBulkString('안녕')).toBe('$6\r\n안녕\r\n');  // UTF-8: 3 bytes per char = 6
+      expect(encodeBulkString('안녕')).toBe('$6\r\n안녕\r\n'); // UTF-8: 3 bytes per char = 6
     });
 
     it('빈 문자열을 인코딩한다', () => {

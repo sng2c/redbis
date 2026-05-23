@@ -3,7 +3,7 @@ import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const bitmapMethods = {
-_stringToBytes(str: string): number[] {
+  _stringToBytes(str: string): number[] {
     const bytes: number[] = [];
     for (let i = 0; i < str.length; i++) {
       bytes.push(str.charCodeAt(i));
@@ -11,35 +11,35 @@ _stringToBytes(str: string): number[] {
     return bytes;
   },
 
-_bytesToString(bytes: number[]): string {
+  _bytesToString(bytes: number[]): string {
     return String.fromCharCode(...bytes);
   },
 
-_getBitAt(bytes: number[], offset: number): 0 | 1 {
+  _getBitAt(bytes: number[], offset: number): 0 | 1 {
     const byteIndex = Math.floor(offset / 8);
     const bitIndex = 7 - (offset % 8);
     if (byteIndex >= bytes.length) return 0;
     return ((bytes[byteIndex] >> bitIndex) & 1) as 0 | 1;
   },
 
-_setBitAt(bytes: number[], offset: number, value: 0 | 1): 0 | 1 {
+  _setBitAt(bytes: number[], offset: number, value: 0 | 1): 0 | 1 {
     const byteIndex = Math.floor(offset / 8);
     const bitIndex = 7 - (offset % 8);
     while (bytes.length <= byteIndex) bytes.push(0);
     const oldVal = (bytes[byteIndex] >> bitIndex) & 1;
     if (value === 1) {
-      bytes[byteIndex] |= (1 << bitIndex);
+      bytes[byteIndex] |= 1 << bitIndex;
     } else {
       bytes[byteIndex] &= ~(1 << bitIndex);
     }
     return oldVal as 0 | 1;
   },
 
-_ensureStringTypeOrThrow(key: string): void {
+  _ensureStringTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'string');
   },
 
-async setbit(key: string, offset: number, value: 0 | 1): Promise<number> {
+  async setbit(key: string, offset: number, value: 0 | 1): Promise<number> {
     this.evictIfExpired(key);
     this._ensureStringTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -61,7 +61,7 @@ async setbit(key: string, offset: number, value: 0 | 1): Promise<number> {
     return oldBit;
   },
 
-async getbit(key: string, offset: number): Promise<number> {
+  async getbit(key: string, offset: number): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return 0;
@@ -70,7 +70,7 @@ async getbit(key: string, offset: number): Promise<number> {
     return this._getBitAt(bytes, offset);
   },
 
-async bitcount(key: string, start?: number, end?: number): Promise<number> {
+  async bitcount(key: string, start?: number, end?: number): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return 0;
@@ -94,7 +94,7 @@ async bitcount(key: string, start?: number, end?: number): Promise<number> {
     return count;
   },
 
-async bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<number> {
+  async bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return bit === 0 ? 0 : -1;
@@ -117,7 +117,11 @@ async bitpos(key: string, bit: 0 | 1, start?: number, end?: number): Promise<num
     return -1;
   },
 
-async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: string[]): Promise<number> {
+  async bitop(
+    operation: 'AND' | 'OR' | 'XOR' | 'NOT',
+    destkey: string,
+    keys: string[]
+  ): Promise<number> {
     for (const key of keys) this.evictIfExpired(key);
     for (const key of keys) {
       const entry = this.store.get(key);
@@ -142,7 +146,7 @@ async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: stri
       const src = srcArrays[0];
       const result: number[] = [];
       for (let i = 0; i < src.length; i++) {
-        result.push((~src[i]) & 0xFF);
+        result.push(~src[i] & 0xff);
       }
       const resultStr = this._bytesToString(result);
       this.evictIfExpired(destkey);
@@ -159,21 +163,21 @@ async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: stri
     const result: number[] = new Array(maxLen).fill(0);
     for (let i = 0; i < maxLen; i++) {
       if (operation === 'AND') {
-        let val = 0xFF;
+        let val = 0xff;
         for (const arr of srcArrays) {
-          val &= (i < arr.length ? arr[i] : 0);
+          val &= i < arr.length ? arr[i] : 0;
         }
         result[i] = val;
       } else if (operation === 'OR') {
         let val = 0;
         for (const arr of srcArrays) {
-          val |= (i < arr.length ? arr[i] : 0);
+          val |= i < arr.length ? arr[i] : 0;
         }
         result[i] = val;
       } else if (operation === 'XOR') {
         let val = 0;
         for (const arr of srcArrays) {
-          val ^= (i < arr.length ? arr[i] : 0);
+          val ^= i < arr.length ? arr[i] : 0;
         }
         result[i] = val;
       }
@@ -185,7 +189,16 @@ async bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: stri
     return result.length;
   },
 
-async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }>): Promise<(number | null)[]> {
+  async bitfield(
+    key: string,
+    operations: Array<{
+      type: 'GET' | 'SET' | 'INCRBY';
+      encoding: string;
+      offset: number;
+      value?: number;
+      overflow?: 'WRAP' | 'SAT' | 'FAIL';
+    }>
+  ): Promise<(number | null)[]> {
     this.evictIfExpired(key);
     this._ensureStringTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -230,7 +243,9 @@ async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; 
             }
             // WRAP
             const range = Math.pow(2, bits);
-            return ((val + Math.pow(2, bits - 1)) % range + range) % range - Math.pow(2, bits - 1);
+            return (
+              ((((val + Math.pow(2, bits - 1)) % range) + range) % range) - Math.pow(2, bits - 1)
+            );
           }
           return val;
         } else {
@@ -279,7 +294,13 @@ async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; 
 
         // Set new value
         const setValue = op.value!;
-        let writeVal = isSigned ? (setValue < 0 ? setValue + Math.pow(2, bits) : setValue) : (setValue < 0 ? setValue + Math.pow(2, bits) : setValue);
+        let writeVal = isSigned
+          ? setValue < 0
+            ? setValue + Math.pow(2, bits)
+            : setValue
+          : setValue < 0
+            ? setValue + Math.pow(2, bits)
+            : setValue;
         for (let b = bits - 1; b >= 0; b--) {
           const bitPos = op.offset + b;
           const byteIdx = Math.floor(bitPos / 8);
@@ -287,7 +308,7 @@ async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; 
           while (bytes.length <= byteIdx) bytes.push(0);
           const bit = (writeVal >> (bits - 1 - b)) & 1;
           if (bit === 1) {
-            bytes[byteIdx] |= (1 << bitIdx);
+            bytes[byteIdx] |= 1 << bitIdx;
           } else {
             bytes[byteIdx] &= ~(1 << bitIdx);
           }
@@ -318,7 +339,11 @@ async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; 
         }
 
         // Write back
-        let writeVal = isSigned ? (clampedVal < 0 ? clampedVal + Math.pow(2, bits) : clampedVal) : clampedVal;
+        let writeVal = isSigned
+          ? clampedVal < 0
+            ? clampedVal + Math.pow(2, bits)
+            : clampedVal
+          : clampedVal;
         for (let b = bits - 1; b >= 0; b--) {
           const bitPos = op.offset + b;
           const byteIdx = Math.floor(bitPos / 8);
@@ -326,7 +351,7 @@ async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; 
           while (bytes.length <= byteIdx) bytes.push(0);
           const bit = (writeVal >> (bits - 1 - b)) & 1;
           if (bit === 1) {
-            bytes[byteIdx] |= (1 << bitIdx);
+            bytes[byteIdx] |= 1 << bitIdx;
           } else {
             bytes[byteIdx] &= ~(1 << bitIdx);
           }
@@ -341,13 +366,21 @@ async bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; 
     return results;
   },
 
-async bitfieldRo(key: string, operations: Array<{ type: 'GET'; encoding: string; offset: number }>): Promise<(number | null)[]> {
+  async bitfieldRo(
+    key: string,
+    operations: Array<{ type: 'GET'; encoding: string; offset: number }>
+  ): Promise<(number | null)[]> {
     // bitfieldRo is read-only — no overflow state needed
-    const opsWithOverflow: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }> = operations.map(op => ({
+    const opsWithOverflow: Array<{
+      type: 'GET' | 'SET' | 'INCRBY';
+      encoding: string;
+      offset: number;
+      value?: number;
+      overflow?: 'WRAP' | 'SAT' | 'FAIL';
+    }> = operations.map((op) => ({
       ...op,
       overflow: 'WRAP' as const,
     }));
     return this.bitfield(key, opsWithOverflow);
   },
-
 };

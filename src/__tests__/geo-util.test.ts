@@ -44,11 +44,11 @@ describe('GEO Utility: encodeGeohash', () => {
 
   it('round-trip: encode then decode should be close to original', () => {
     const testCases: [number, number][] = [
-      [13.361389, 38.115556],   // Palermo
-      [15.087269, 37.502669],   // Catania
-      [-73.9857, 40.7484],      // NYC
-      [2.3522, 48.8566],        // Paris
-      [139.6917, 35.6895],      // Tokyo
+      [13.361389, 38.115556], // Palermo
+      [15.087269, 37.502669], // Catania
+      [-73.9857, 40.7484], // NYC
+      [2.3522, 48.8566], // Paris
+      [139.6917, 35.6895], // Tokyo
     ];
     for (const [lon, lat] of testCases) {
       const hash = encodeGeohash(lon, lat);

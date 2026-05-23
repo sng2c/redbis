@@ -132,7 +132,10 @@ describe('PubSubManager', () => {
     pubsub.subscribe('conn2', ['news'], makeSend('conn2'));
     pubsub.subscribe('conn1', ['sports'], makeSend('conn1'));
     const result = pubsub.getNumSub(['news', 'sports']);
-    expect(result).toEqual([['news', 2], ['sports', 1]]);
+    expect(result).toEqual([
+      ['news', 2],
+      ['sports', 1],
+    ]);
   });
 
   it('getNumPat - 패턴 구독 수', () => {

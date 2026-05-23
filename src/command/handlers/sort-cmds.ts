@@ -33,7 +33,8 @@ async function handleSort(ctx: HandlerContext, args: string[]): Promise<string> 
         const offset = parseInt(args[i]);
         i++;
         const count = parseInt(args[i]);
-        if (isNaN(offset) || isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+        if (isNaN(offset) || isNaN(count))
+          return encodeError('ERR value is not an integer or out of range');
         limit = { offset, count };
         break;
       case 'GET':
@@ -109,7 +110,8 @@ async function handleSortRo(ctx: HandlerContext, args: string[]): Promise<string
         const offset = parseInt(args[i]);
         i++;
         const count = parseInt(args[i]);
-        if (isNaN(offset) || isNaN(count)) return encodeError('ERR value is not an integer or out of range');
+        if (isNaN(offset) || isNaN(count))
+          return encodeError('ERR value is not an integer or out of range');
         limit = { offset, count };
         break;
       case 'GET':

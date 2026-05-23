@@ -133,7 +133,9 @@ describe('parseConnectionString 단위 테스트', () => {
   });
 
   it('지원하지 않는 스킴일 때 에러를 발생시킨다', () => {
-    expect(() => parseConnectionString('postgres://localhost')).toThrow('Unsupported connection string scheme: postgres');
+    expect(() => parseConnectionString('postgres://localhost')).toThrow(
+      'Unsupported connection string scheme: postgres'
+    );
   });
 
   it('sqlite:/// 절대경로 다단계를 파싱하면 { type: "sqlite", path: "/absolute/path/db.sqlite" }을 반환한다', () => {

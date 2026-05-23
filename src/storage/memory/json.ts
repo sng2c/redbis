@@ -3,11 +3,13 @@ import { assertType } from '../type-check';
 import type { InMemoryStorage } from './core';
 
 export const jsonMethods = {
-_ensureJsonTypeOrThrow(key: string): void {
+  _ensureJsonTypeOrThrow(key: string): void {
     assertType(this.store.get(key)?.type, 'json');
   },
 
-_parseJsonPath(path: string): Array<{ type: 'field'; name: string } | { type: 'index'; index: number }> {
+  _parseJsonPath(
+    path: string
+  ): Array<{ type: 'field'; name: string } | { type: 'index'; index: number }> {
     let p = path;
     if (p === '$' || p === '.') return [];
     if (p.startsWith('$.')) p = p.slice(2);
@@ -41,19 +43,26 @@ _parseJsonPath(path: string): Array<{ type: 'field'; name: string } | { type: 'i
     return segments;
   },
 
-_jsonResolvePath(root: any, path: string): { parent: any; key: string | number; value: any }[] {
+  _jsonResolvePath(root: any, path: string): { parent: any; key: string | number; value: any }[] {
     if (path === '$' || path === '.' || path === '') {
       return [{ parent: null, key: '', value: root }];
     }
 
     const segments = this._parseJsonPath(path);
-    let current: { parent: any; key: string | number; value: any }[] = [{ parent: null, key: '', value: root }];
+    let current: { parent: any; key: string | number; value: any }[] = [
+      { parent: null, key: '', value: root },
+    ];
 
     for (const seg of segments) {
       const next: { parent: any; key: string | number; value: any }[] = [];
       for (const item of current) {
         if (seg.type === 'field') {
-          if (item.value !== null && typeof item.value === 'object' && !Array.isArray(item.value) && seg.name in item.value) {
+          if (
+            item.value !== null &&
+            typeof item.value === 'object' &&
+            !Array.isArray(item.value) &&
+            seg.name in item.value
+          ) {
             next.push({ parent: item.value, key: seg.name, value: item.value[seg.name] });
           }
         } else if (seg.type === 'index') {
@@ -67,7 +76,7 @@ _jsonResolvePath(root: any, path: string): { parent: any; key: string | number; 
     return current;
   },
 
-_jsonTypeOf(val: any): string {
+  _jsonTypeOf(val: any): string {
     if (val === null) return 'null';
     if (Array.isArray(val)) return 'array';
     if (typeof val === 'object') return 'object';
@@ -79,7 +88,13 @@ _jsonTypeOf(val: any): string {
     return 'unknown';
   },
 
-async jsonSet(key: string, path: string, value: string, nx?: boolean, xx?: boolean): Promise<string | null> {
+  async jsonSet(
+    key: string,
+    path: string,
+    value: string,
+    nx?: boolean,
+    xx?: boolean
+  ): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
 
@@ -93,7 +108,11 @@ async jsonSet(key: string, path: string, value: string, nx?: boolean, xx?: boole
     if (path === '$' || path === '') {
       if (nx && this.store.has(key)) return null;
       if (xx && !this.store.has(key)) return null;
-      this.store.set(key, { value: JSON.stringify(parsedValue), type: 'json', expiresAt: this.store.get(key)?.expiresAt ?? null });
+      this.store.set(key, {
+        value: JSON.stringify(parsedValue),
+        type: 'json',
+        expiresAt: this.store.get(key)?.expiresAt ?? null,
+      });
       return 'OK';
     }
 
@@ -128,7 +147,7 @@ async jsonSet(key: string, path: string, value: string, nx?: boolean, xx?: boole
     return 'OK';
   },
 
-async jsonGet(key: string, paths?: string[]): Promise<string | null> {
+  async jsonGet(key: string, paths?: string[]): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -159,7 +178,7 @@ async jsonGet(key: string, paths?: string[]): Promise<string | null> {
     return JSON.stringify(result);
   },
 
-async jsonDel(key: string, path?: string): Promise<number> {
+  async jsonDel(key: string, path?: string): Promise<number> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return 0;
@@ -189,12 +208,16 @@ async jsonDel(key: string, path?: string): Promise<number> {
     }
 
     if (count > 0) {
-      this.store.set(key, { value: JSON.stringify(root), type: 'json', expiresAt: entry.expiresAt });
+      this.store.set(key, {
+        value: JSON.stringify(root),
+        type: 'json',
+        expiresAt: entry.expiresAt,
+      });
     }
     return count;
   },
 
-async jsonType(key: string, path?: string): Promise<string | null> {
+  async jsonType(key: string, path?: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -210,7 +233,7 @@ async jsonType(key: string, path?: string): Promise<string | null> {
     return this._jsonTypeOf(resolved[0].value);
   },
 
-async jsonStrlen(key: string, path?: string): Promise<number | null> {
+  async jsonStrlen(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -228,7 +251,7 @@ async jsonStrlen(key: string, path?: string): Promise<number | null> {
     return null;
   },
 
-async jsonStrappend(key: string, path: string, value: string): Promise<number | null> {
+  async jsonStrappend(key: string, path: string, value: string): Promise<number | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -264,7 +287,7 @@ async jsonStrappend(key: string, path: string, value: string): Promise<number | 
     return null;
   },
 
-async jsonObjkeys(key: string, path?: string): Promise<string[] | null> {
+  async jsonObjkeys(key: string, path?: string): Promise<string[] | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -282,7 +305,7 @@ async jsonObjkeys(key: string, path?: string): Promise<string[] | null> {
     return null;
   },
 
-async jsonObjlen(key: string, path?: string): Promise<number | null> {
+  async jsonObjlen(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -300,7 +323,7 @@ async jsonObjlen(key: string, path?: string): Promise<number | null> {
     return null;
   },
 
-async jsonArrappend(key: string, path: string, values: string[]): Promise<(number | null)[]> {
+  async jsonArrappend(key: string, path: string, values: string[]): Promise<(number | null)[]> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -310,8 +333,12 @@ async jsonArrappend(key: string, path: string, values: string[]): Promise<(numbe
     const resolved = this._jsonResolvePath(root, path);
     const results: (number | null)[] = [];
 
-    const parsedValues: any[] = values.map(v => {
-      try { return JSON.parse(v); } catch { return v; }
+    const parsedValues: any[] = values.map((v) => {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return v;
+      }
     });
 
     for (const r of resolved) {
@@ -330,7 +357,7 @@ async jsonArrappend(key: string, path: string, values: string[]): Promise<(numbe
     return results;
   },
 
-async jsonArrpop(key: string, path?: string, index?: number): Promise<string | null> {
+  async jsonArrpop(key: string, path?: string, index?: number): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -354,7 +381,7 @@ async jsonArrpop(key: string, path?: string, index?: number): Promise<string | n
     return JSON.stringify(popped);
   },
 
-async jsonArrlen(key: string, path?: string): Promise<number | null> {
+  async jsonArrlen(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -370,7 +397,13 @@ async jsonArrlen(key: string, path?: string): Promise<number | null> {
     return null;
   },
 
-async jsonArrindex(key: string, path: string, value: string, start?: number, stop?: number): Promise<number | null> {
+  async jsonArrindex(
+    key: string,
+    path: string,
+    value: string,
+    start?: number,
+    stop?: number
+  ): Promise<number | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -382,7 +415,11 @@ async jsonArrindex(key: string, path: string, value: string, start?: number, sto
     if (!Array.isArray(resolved[0].value)) return null;
 
     let searchValue: any;
-    try { searchValue = JSON.parse(value); } catch { searchValue = value; }
+    try {
+      searchValue = JSON.parse(value);
+    } catch {
+      searchValue = value;
+    }
 
     const arr = resolved[0].value;
     const s = start ?? 0;
@@ -397,7 +434,12 @@ async jsonArrindex(key: string, path: string, value: string, start?: number, sto
     return -1;
   },
 
-async jsonArrinsert(key: string, path: string, index: number, values: string[]): Promise<(number | null)[]> {
+  async jsonArrinsert(
+    key: string,
+    path: string,
+    index: number,
+    values: string[]
+  ): Promise<(number | null)[]> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -407,8 +449,12 @@ async jsonArrinsert(key: string, path: string, index: number, values: string[]):
     const resolved = this._jsonResolvePath(root, path);
     const results: (number | null)[] = [];
 
-    const parsedValues: any[] = values.map(v => {
-      try { return JSON.parse(v); } catch { return v; }
+    const parsedValues: any[] = values.map((v) => {
+      try {
+        return JSON.parse(v);
+      } catch {
+        return v;
+      }
     });
 
     for (const r of resolved) {
@@ -424,7 +470,12 @@ async jsonArrinsert(key: string, path: string, index: number, values: string[]):
     return results;
   },
 
-async jsonArrtrim(key: string, path: string, start: number, stop: number): Promise<number | null> {
+  async jsonArrtrim(
+    key: string,
+    path: string,
+    start: number,
+    stop: number
+  ): Promise<number | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -454,7 +505,7 @@ async jsonArrtrim(key: string, path: string, start: number, stop: number): Promi
     return r.value.length;
   },
 
-async jsonNumincrby(key: string, path: string, increment: number): Promise<string | null> {
+  async jsonNumincrby(key: string, path: string, increment: number): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -483,7 +534,7 @@ async jsonNumincrby(key: string, path: string, increment: number): Promise<strin
     return null;
   },
 
-async jsonNummultby(key: string, path: string, multiplier: number): Promise<string | null> {
+  async jsonNummultby(key: string, path: string, multiplier: number): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -512,7 +563,7 @@ async jsonNummultby(key: string, path: string, multiplier: number): Promise<stri
     return null;
   },
 
-async jsonMget(keys: string[], path: string): Promise<(string | null)[]> {
+  async jsonMget(keys: string[], path: string): Promise<(string | null)[]> {
     const results: (string | null)[] = [];
     for (const key of keys) {
       this.evictIfExpired(key);
@@ -532,13 +583,13 @@ async jsonMget(keys: string[], path: string): Promise<(string | null)[]> {
     return results;
   },
 
-async jsonMset(pairs: Array<{ key: string; path: string; value: string }>): Promise<void> {
+  async jsonMset(pairs: Array<{ key: string; path: string; value: string }>): Promise<void> {
     for (const { key, path, value } of pairs) {
       await this.jsonSet(key, path, value);
     }
   },
 
-async jsonToggle(key: string, path?: string): Promise<string | null> {
+  async jsonToggle(key: string, path?: string): Promise<string | null> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -563,12 +614,16 @@ async jsonToggle(key: string, path?: string): Promise<string | null> {
     }
 
     if (result !== null) {
-      this.store.set(key, { value: JSON.stringify(root), type: 'json', expiresAt: entry.expiresAt });
+      this.store.set(key, {
+        value: JSON.stringify(root),
+        type: 'json',
+        expiresAt: entry.expiresAt,
+      });
     }
     return result;
   },
 
-async jsonClear(key: string, path?: string): Promise<number> {
+  async jsonClear(key: string, path?: string): Promise<number> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
     const entry = this.store.get(key);
@@ -587,7 +642,11 @@ async jsonClear(key: string, path?: string): Promise<number> {
       } else if (typeof root === 'number') {
         root = 0;
       }
-      this.store.set(key, { value: JSON.stringify(root), type: 'json', expiresAt: entry.expiresAt });
+      this.store.set(key, {
+        value: JSON.stringify(root),
+        type: 'json',
+        expiresAt: entry.expiresAt,
+      });
       return 1;
     }
 
@@ -610,12 +669,16 @@ async jsonClear(key: string, path?: string): Promise<number> {
     }
 
     if (count > 0) {
-      this.store.set(key, { value: JSON.stringify(root), type: 'json', expiresAt: entry.expiresAt });
+      this.store.set(key, {
+        value: JSON.stringify(root),
+        type: 'json',
+        expiresAt: entry.expiresAt,
+      });
     }
     return count;
   },
 
-async jsonDebugMemory(key: string, path?: string): Promise<number | null> {
+  async jsonDebugMemory(key: string, path?: string): Promise<number | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -633,7 +696,7 @@ async jsonDebugMemory(key: string, path?: string): Promise<number | null> {
     return JSON.stringify(resolved[0].value).length;
   },
 
-async jsonResp(key: string, path?: string): Promise<string | null> {
+  async jsonResp(key: string, path?: string): Promise<string | null> {
     this.evictIfExpired(key);
     const entry = this.store.get(key);
     if (!entry) return null;
@@ -664,7 +727,7 @@ async jsonResp(key: string, path?: string): Promise<string | null> {
       }
       if (typeof v === 'object') {
         const keys = Object.keys(v);
-        return `*${keys.length * 2}\n${keys.flatMap(k => [serializeResp(k), serializeResp(v[k])]).join('\n')}`;
+        return `*${keys.length * 2}\n${keys.flatMap((k) => [serializeResp(k), serializeResp(v[k])]).join('\n')}`;
       }
       return String(v);
     };
@@ -672,7 +735,7 @@ async jsonResp(key: string, path?: string): Promise<string | null> {
     return serializeResp(val);
   },
 
-async jsonMerge(key: string, path: string, value: string): Promise<void> {
+  async jsonMerge(key: string, path: string, value: string): Promise<void> {
     this.evictIfExpired(key);
     this._ensureJsonTypeOrThrow(key);
 
@@ -707,7 +770,7 @@ async jsonMerge(key: string, path: string, value: string): Promise<void> {
     this.store.set(key, { value: JSON.stringify(root), type: 'json', expiresAt: entry.expiresAt });
   },
 
-_deepMerge(target: any, source: any): any {
+  _deepMerge(target: any, source: any): any {
     if (source === null) return null;
     if (typeof source !== 'object' || Array.isArray(source)) return source;
     if (typeof target !== 'object' || target === null || Array.isArray(target)) return source;
@@ -715,7 +778,12 @@ _deepMerge(target: any, source: any): any {
     for (const key of Object.keys(source)) {
       if (source[key] === null) {
         delete result[key];
-      } else if (typeof source[key] === 'object' && !Array.isArray(source[key]) && typeof result[key] === 'object' && !Array.isArray(result[key])) {
+      } else if (
+        typeof source[key] === 'object' &&
+        !Array.isArray(source[key]) &&
+        typeof result[key] === 'object' &&
+        !Array.isArray(result[key])
+      ) {
         result[key] = this._deepMerge(result[key], source[key]);
       } else {
         result[key] = source[key];
@@ -723,5 +791,4 @@ _deepMerge(target: any, source: any): any {
     }
     return result;
   },
-
 };

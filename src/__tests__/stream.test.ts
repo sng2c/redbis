@@ -22,7 +22,15 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     });
 
     it('XADD 여러 필드를 추가한다', async () => {
-      const result = await handler.execute(['XADD', 'mystream', '*', 'field1', 'value1', 'field2', 'value2']);
+      const result = await handler.execute([
+        'XADD',
+        'mystream',
+        '*',
+        'field1',
+        'value1',
+        'field2',
+        'value2',
+      ]);
       expect(result).toMatch(/\$\d+\r\n\d+-0\r\n/);
     });
 
@@ -132,7 +140,14 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     });
 
     it('XGROUP CREATE with MKSTREAM은 스트림을 자동 생성한다', async () => {
-      const result = await handler.execute(['XGROUP', 'CREATE', 'newstream', 'mygroup', '0-0', 'MKSTREAM']);
+      const result = await handler.execute([
+        'XGROUP',
+        'CREATE',
+        'newstream',
+        'mygroup',
+        '0-0',
+        'MKSTREAM',
+      ]);
       expect(result).toContain('OK');
     });
   });
@@ -150,7 +165,13 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XGROUP CREATECONSUMER로 컨슈머를 생성한다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      const result = await handler.execute(['XGROUP', 'CREATECONSUMER', 'mystream', 'mygroup', 'consumer1']);
+      const result = await handler.execute([
+        'XGROUP',
+        'CREATECONSUMER',
+        'mystream',
+        'mygroup',
+        'consumer1',
+      ]);
       expect(result).toBe(':1\r\n');
     });
   });
@@ -160,7 +181,13 @@ describe('Stream 명령어 — InMemoryStorage', () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
       await handler.execute(['XGROUP', 'CREATECONSUMER', 'mystream', 'mygroup', 'consumer1']);
-      const result = await handler.execute(['XGROUP', 'DELCONSUMER', 'mystream', 'mygroup', 'consumer1']);
+      const result = await handler.execute([
+        'XGROUP',
+        'DELCONSUMER',
+        'mystream',
+        'mygroup',
+        'consumer1',
+      ]);
       expect(result).toBe(':0\r\n');
     });
   });
@@ -200,7 +227,15 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XREADGROUP로 그룹 메시지를 읽는다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      const result = await handler.execute(['XREADGROUP', 'GROUP', 'mygroup', 'consumer1', 'STREAMS', 'mystream', '>']);
+      const result = await handler.execute([
+        'XREADGROUP',
+        'GROUP',
+        'mygroup',
+        'consumer1',
+        'STREAMS',
+        'mystream',
+        '>',
+      ]);
       expect(result).toMatch(/\*\d+\r\n/);
     });
   });
@@ -209,7 +244,15 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XACK로 메시지를 확인한다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      await handler.execute(['XREADGROUP', 'GROUP', 'mygroup', 'consumer1', 'STREAMS', 'mystream', '>']);
+      await handler.execute([
+        'XREADGROUP',
+        'GROUP',
+        'mygroup',
+        'consumer1',
+        'STREAMS',
+        'mystream',
+        '>',
+      ]);
       const result = await handler.execute(['XACK', 'mystream', 'mygroup', '1-0']);
       expect(result).toBe(':1\r\n');
     });
@@ -219,7 +262,15 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XPENDING로 대기 메시지 요약을 반환한다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      await handler.execute(['XREADGROUP', 'GROUP', 'mygroup', 'consumer1', 'STREAMS', 'mystream', '>']);
+      await handler.execute([
+        'XREADGROUP',
+        'GROUP',
+        'mygroup',
+        'consumer1',
+        'STREAMS',
+        'mystream',
+        '>',
+      ]);
       const result = await handler.execute(['XPENDING', 'mystream', 'mygroup']);
       // Should return summary info
       expect(result).toMatch(/\*/);
@@ -230,8 +281,23 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XCLAIM로 메시지 소유권을 이전한다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      await handler.execute(['XREADGROUP', 'GROUP', 'mygroup', 'consumer1', 'STREAMS', 'mystream', '>']);
-      const result = await handler.execute(['XCLAIM', 'mystream', 'mygroup', 'consumer2', '0', '1-0']);
+      await handler.execute([
+        'XREADGROUP',
+        'GROUP',
+        'mygroup',
+        'consumer1',
+        'STREAMS',
+        'mystream',
+        '>',
+      ]);
+      const result = await handler.execute([
+        'XCLAIM',
+        'mystream',
+        'mygroup',
+        'consumer2',
+        '0',
+        '1-0',
+      ]);
       expect(result).toMatch(/\*/);
     });
   });
@@ -240,8 +306,23 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XAUTOCLAIM로 자동 소유권 이전한다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      await handler.execute(['XREADGROUP', 'GROUP', 'mygroup', 'consumer1', 'STREAMS', 'mystream', '>']);
-      const result = await handler.execute(['XAUTOCLAIM', 'mystream', 'mygroup', 'consumer2', '0', '0-0']);
+      await handler.execute([
+        'XREADGROUP',
+        'GROUP',
+        'mygroup',
+        'consumer1',
+        'STREAMS',
+        'mystream',
+        '>',
+      ]);
+      const result = await handler.execute([
+        'XAUTOCLAIM',
+        'mystream',
+        'mygroup',
+        'consumer2',
+        '0',
+        '0-0',
+      ]);
       expect(result).toMatch(/\*/);
     });
   });
@@ -267,7 +348,15 @@ describe('Stream 명령어 — InMemoryStorage', () => {
     it('XINFO CONSUMERS로 컨슈머 정보를 반환한다', async () => {
       await handler.execute(['XADD', 'mystream', '1-0', 'f', 'v1']);
       await handler.execute(['XGROUP', 'CREATE', 'mystream', 'mygroup', '0-0']);
-      await handler.execute(['XREADGROUP', 'GROUP', 'mygroup', 'consumer1', 'STREAMS', 'mystream', '>']);
+      await handler.execute([
+        'XREADGROUP',
+        'GROUP',
+        'mygroup',
+        'consumer1',
+        'STREAMS',
+        'mystream',
+        '>',
+      ]);
       const result = await handler.execute(['XINFO', 'CONSUMERS', 'mystream', 'mygroup']);
       expect(result).toMatch(/\*/);
     });

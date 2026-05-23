@@ -176,12 +176,14 @@ async function handleLpos(ctx: HandlerContext, args: string[]): Promise<string> 
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       rank = parseInt(args[i]);
-      if (isNaN(rank) || rank === 0) return encodeError('ERR value is not an integer or out of range');
+      if (isNaN(rank) || rank === 0)
+        return encodeError('ERR value is not an integer or out of range');
     } else if (opt === 'MAXLEN') {
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       maxlen = parseInt(args[i]);
-      if (isNaN(maxlen) || maxlen <= 0) return encodeError('ERR value is not an integer or out of range');
+      if (isNaN(maxlen) || maxlen <= 0)
+        return encodeError('ERR value is not an integer or out of range');
     } else if (opt === 'FIRST') {
       if (rank === undefined) rank = 1;
     } else {
@@ -230,7 +232,12 @@ async function handleLinsert(ctx: HandlerContext, args: string[]): Promise<strin
   if (position !== 'BEFORE' && position !== 'AFTER') {
     return encodeError('ERR syntax error');
   }
-  const result = await ctx.storage.linsert(args[0], position as 'BEFORE' | 'AFTER', args[2], args[3]);
+  const result = await ctx.storage.linsert(
+    args[0],
+    position as 'BEFORE' | 'AFTER',
+    args[2],
+    args[3]
+  );
   return encodeInteger(result);
 }
 
@@ -243,7 +250,12 @@ async function handleLmove(ctx: HandlerContext, args: string[]): Promise<string>
   if ((srcDir !== 'LEFT' && srcDir !== 'RIGHT') || (destDir !== 'LEFT' && destDir !== 'RIGHT')) {
     return encodeError('ERR syntax error');
   }
-  const result = await ctx.storage.lmove(args[0], args[1], srcDir as 'LEFT' | 'RIGHT', destDir as 'LEFT' | 'RIGHT');
+  const result = await ctx.storage.lmove(
+    args[0],
+    args[1],
+    srcDir as 'LEFT' | 'RIGHT',
+    destDir as 'LEFT' | 'RIGHT'
+  );
   return encodeBulkString(result);
 }
 
@@ -300,7 +312,13 @@ async function handleBlmove(ctx: HandlerContext, args: string[]): Promise<string
   if (isNaN(timeout)) {
     return encodeError('ERR timeout is not a float or out of range');
   }
-  const result = await ctx.storage.blmove(args[0], args[1], srcDir as 'LEFT' | 'RIGHT', destDir as 'LEFT' | 'RIGHT', timeout);
+  const result = await ctx.storage.blmove(
+    args[0],
+    args[1],
+    srcDir as 'LEFT' | 'RIGHT',
+    destDir as 'LEFT' | 'RIGHT',
+    timeout
+  );
   return encodeBulkString(result);
 }
 
@@ -327,7 +345,8 @@ async function handleLmpop(ctx: HandlerContext, args: string[]): Promise<string>
       i++;
       if (i >= args.length) return encodeError('ERR syntax error');
       count = parseInt(args[i]);
-      if (isNaN(count) || count <= 0) return encodeError('ERR value is not an integer or out of range');
+      if (isNaN(count) || count <= 0)
+        return encodeError('ERR value is not an integer or out of range');
     } else {
       return encodeError('ERR syntax error');
     }

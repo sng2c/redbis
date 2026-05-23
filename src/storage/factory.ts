@@ -3,9 +3,7 @@ import type { IStorage } from './interface';
 import { InMemoryStorage } from './memory';
 import { SqliteStorage } from './sqlite';
 
-export type ParsedConnectionString =
-  | { type: 'memory' }
-  | { type: 'sqlite'; path: string };
+export type ParsedConnectionString = { type: 'memory' } | { type: 'sqlite'; path: string };
 
 export function parseConnectionString(url: string): ParsedConnectionString {
   const separatorIndex = url.indexOf('://');
