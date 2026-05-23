@@ -56,60 +56,50 @@ export interface GroupInfo {
   lag: number;
 }
 
-export interface IStorage {
-  // === Existing (DO NOT CHANGE) ===
+// === Sub-interfaces (per-domain) ===
+
+export interface IKeyStorage {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   delete(key: string): Promise<boolean>;
   keys(pattern: string): Promise<string[]>;
   flush(): Promise<void>;
-
-  // === NEW: Multi-key ===
   mget(keys: string[]): Promise<(string | null)[]>;
   mset(pairs: Array<{ key: string; value: string }>): Promise<void>;
   msetnx(pairs: Array<{ key: string; value: string }>): Promise<boolean>;
-
-  // === NEW: String operations ===
-  append(key: string, value: string): Promise<number>;          // returns new length
+  append(key: string, value: string): Promise<number>;
   strlen(key: string): Promise<number>;
   getrange(key: string, start: number, end: number): Promise<string>;
-  setrange(key: string, offset: number, value: string): Promise<number>; // returns new length
-  incrby(key: string, delta: number): Promise<number>;           // INCR/DECR/INCRBY/DECRBY all use this
-  incrbyfloat(key: string, delta: number): Promise<string>;     // returns string repr
-
-  // === NEW: Conditional set ===
-  setnx(key: string, value: string): Promise<boolean>;          // true if set
+  setrange(key: string, offset: number, value: string): Promise<number>;
+  incrby(key: string, delta: number): Promise<number>;
+  incrbyfloat(key: string, delta: number): Promise<string>;
+  setnx(key: string, value: string): Promise<boolean>;
   setex(key: string, seconds: number, value: string): Promise<void>;
   psetex(key: string, milliseconds: number, value: string): Promise<void>;
-  getset(key: string, value: string): Promise<string | null>;   // returns old value
-  getdel(key: string): Promise<string | null>;                   // returns value then deletes
+  getset(key: string, value: string): Promise<string | null>;
+  getdel(key: string): Promise<string | null>;
   getex(key: string, options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }): Promise<string | null>;
-
-  // === NEW: Key management ===
-  rename(oldKey: string, newKey: string): Promise<void>;         // throws if oldKey doesn't exist
-  renamenx(oldKey: string, newKey: string): Promise<boolean>;    // true if renamed
-  type(key: string): Promise<string>;                            // 'string'|'hash'|'list'|'set'|'zset'|'none'
+  rename(oldKey: string, newKey: string): Promise<void>;
+  renamenx(oldKey: string, newKey: string): Promise<boolean>;
+  type(key: string): Promise<string>;
   dbsize(): Promise<number>;
-  copy(source: string, destination: string): Promise<boolean>;  // true if copied
+  copy(source: string, destination: string): Promise<boolean>;
   randomkey(): Promise<string | null>;
-  unlink(keys: string[]): Promise<number>;                      // returns count of deleted keys
-  touch(keys: string[]): Promise<number>;                       // returns count of existing keys
-
-  // === NEW: Expiry ===
-  expire(key: string, seconds: number): Promise<boolean>;        // true if timeout set
+  unlink(keys: string[]): Promise<number>;
+  touch(keys: string[]): Promise<number>;
+  expire(key: string, seconds: number): Promise<boolean>;
   expireat(key: string, timestamp: number): Promise<boolean>;
   pexpire(key: string, milliseconds: number): Promise<boolean>;
   pexpireat(key: string, millisecondsTimestamp: number): Promise<boolean>;
-  ttl(key: string): Promise<number>;                              // -1=no expiry, -2=key missing
+  ttl(key: string): Promise<number>;
   pttl(key: string): Promise<number>;
-  persist(key: string): Promise<boolean>;                        // true if timeout removed
-  expiretime(key: string): Promise<number>;                      // unix sec, -1=no expiry, -2=missing
-  pexpiretime(key: string): Promise<number>;                    // unix ms
-
-  // === NEW: SCAN ===
+  persist(key: string): Promise<boolean>;
+  expiretime(key: string): Promise<number>;
+  pexpiretime(key: string): Promise<number>;
   scan(cursor: number, pattern?: string, count?: number): Promise<{ cursor: number; keys: string[] }>;
+}
 
-  // === Hash operations ===
+export interface IHashStorage {
   hset(key: string, pairs: Array<{ field: string; value: string }>): Promise<number>;
   hget(key: string, field: string): Promise<string | null>;
   hdel(key: string, fields: string[]): Promise<number>;
@@ -128,8 +118,6 @@ export interface IStorage {
   hgetdel(key: string, fields: string[]): Promise<(string | null)[]>;
   hgetex(key: string, fields: string[], options?: { ex?: number; px?: number; exat?: number; pxat?: number; persist?: boolean }): Promise<(string | null)[]>;
   hsetex(key: string, pairs: Array<{ field: string; value: string }>, options?: { ex?: number; px?: number; exat?: number; pxat?: number; keepttl?: boolean }): Promise<number>;
-
-  // Hash field expiry
   hexpire(key: string, fields: string[], seconds: number): Promise<number[]>;
   hexpireat(key: string, fields: string[], timestamp: number): Promise<number[]>;
   hpexpire(key: string, fields: string[], milliseconds: number): Promise<number[]>;
@@ -139,8 +127,9 @@ export interface IStorage {
   hpersist(key: string, fields: string[]): Promise<number[]>;
   httl(key: string, fields: string[]): Promise<number[]>;
   hpttl(key: string, fields: string[]): Promise<number[]>;
+}
 
-  // === List operations ===
+export interface IListStorage {
   lpush(key: string, elements: string[]): Promise<number>;
   rpush(key: string, elements: string[]): Promise<number>;
   lpop(key: string, count?: number): Promise<string | string[] | null>;
@@ -162,27 +151,29 @@ export interface IStorage {
   brpoplpush(source: string, destination: string, timeout: number): Promise<string | null>;
   blmove(source: string, destination: string, srcDir: 'LEFT' | 'RIGHT', destDir: 'LEFT' | 'RIGHT', timeout: number): Promise<string | null>;
   lmpop(numkeys: number, keys: string[], dir: 'LEFT' | 'RIGHT', count?: number): Promise<{ key: string; elements: string[] } | null>;
+}
 
-  // ── Set operations ──
-  sadd(key: string, members: string[]): Promise<number>;           // returns count of NEW members added
-  srem(key: string, members: string[]): Promise<number>;           // returns count of members removed
-  smembers(key: string): Promise<string[]>;                        // returns all members
-  scard(key: string): Promise<number>;                             // returns member count
-  sismember(key: string, member: string): Promise<boolean>;        // true/false
-  smismember(key: string, members: string[]): Promise<boolean[]>;   // array of booleans
-  srandmember(key: string, count?: number): Promise<string[]>;     // random members (negative count → duplicates)
-  spop(key: string, count?: number): Promise<string[]>;           // remove + return random members
-  smove(source: string, destination: string, member: string): Promise<boolean>; // true if moved
-  sdiff(keys: string[]): Promise<string[]>;                        // diff of first key against rest
-  sinter(keys: string[]): Promise<string[]>;                       // intersection
-  sunion(keys: string[]): Promise<string[]>;                       // union
-  sdiffstore(destination: string, keys: string[]): Promise<number>; // diff → store, return count
-  sinterstore(destination: string, keys: string[]): Promise<number>; // inter → store, return count
-  sunionstore(destination: string, keys: string[]): Promise<number>; // union → store, return count
-  sintercard(keys: string[], limit?: number): Promise<number>;     // intersection cardinality, optional LIMIT
-  sscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]>; // cursor iteration
+export interface ISetStorage {
+  sadd(key: string, members: string[]): Promise<number>;
+  srem(key: string, members: string[]): Promise<number>;
+  smembers(key: string): Promise<string[]>;
+  scard(key: string): Promise<number>;
+  sismember(key: string, member: string): Promise<boolean>;
+  smismember(key: string, members: string[]): Promise<boolean[]>;
+  srandmember(key: string, count?: number): Promise<string[]>;
+  spop(key: string, count?: number): Promise<string[]>;
+  smove(source: string, destination: string, member: string): Promise<boolean>;
+  sdiff(keys: string[]): Promise<string[]>;
+  sinter(keys: string[]): Promise<string[]>;
+  sunion(keys: string[]): Promise<string[]>;
+  sdiffstore(destination: string, keys: string[]): Promise<number>;
+  sinterstore(destination: string, keys: string[]): Promise<number>;
+  sunionstore(destination: string, keys: string[]): Promise<number>;
+  sintercard(keys: string[], limit?: number): Promise<number>;
+  sscan(key: string, cursor: number, pattern?: string, count?: number): Promise<[number, string[]]>;
+}
 
-  // === Sorted Set operations ===
+export interface IZSetStorage {
   zadd(key: string, scoreMembers: Array<{ score: number; member: string }>, options?: { nx?: boolean; xx?: boolean; gt?: boolean; lt?: boolean; ch?: boolean; incr?: boolean }): Promise<number | string | null>;
   zrem(key: string, members: string[]): Promise<number>;
   zscore(key: string, member: string): Promise<string | null>;
@@ -213,8 +204,9 @@ export interface IStorage {
   bzpopmin(keys: string[], timeout: number): Promise<{ key: string; member: string; score: number } | null>;
   bzmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
   zmpop(numkeys: number, keys: string[], minmax: 'MIN' | 'MAX', count?: number): Promise<{ key: string; elements: Array<{ member: string; score: number }> } | null>;
+}
 
-  // === Bitmap operations ===
+export interface IBitmapStorage {
   setbit(key: string, offset: number, value: 0 | 1): Promise<number>;
   getbit(key: string, offset: number): Promise<number>;
   bitcount(key: string, start?: number, end?: number): Promise<number>;
@@ -222,13 +214,15 @@ export interface IStorage {
   bitop(operation: 'AND' | 'OR' | 'XOR' | 'NOT', destkey: string, keys: string[]): Promise<number>;
   bitfield(key: string, operations: Array<{ type: 'GET' | 'SET' | 'INCRBY'; encoding: string; offset: number; value?: number; overflow?: 'WRAP' | 'SAT' | 'FAIL' }>): Promise<(number | null)[]>;
   bitfieldRo(key: string, operations: Array<{ type: 'GET'; encoding: string; offset: number }>): Promise<(number | null)[]>;
+}
 
-  // === HyperLogLog operations ===
+export interface IHllStorage {
   pfadd(key: string, elements: string[]): Promise<number>;
   pfcount(keys: string[]): Promise<number>;
   pfmerge(destkey: string, sourceKeys: string[]): Promise<void>;
+}
 
-  // === JSON operations ===
+export interface IJsonStorage {
   jsonSet(key: string, path: string, value: string, nx?: boolean, xx?: boolean): Promise<string | null>;
   jsonGet(key: string, paths?: string[]): Promise<string | null>;
   jsonDel(key: string, path?: string): Promise<number>;
@@ -252,129 +246,44 @@ export interface IStorage {
   jsonDebugMemory(key: string, path?: string): Promise<number | null>;
   jsonResp(key: string, path?: string): Promise<string | null>;
   jsonMerge(key: string, path: string, value: string): Promise<void>;
+}
 
-  // === GEO operations ===
-
-  /**
-   * GEOADD: Add one or more geospatial members.
-   * Returns the number of new members added (or modified count with CH flag).
-   * longitude/latitude pairs validated against valid ranges.
-   */
+export interface IGeoStorage {
   geoadd(key: string, members: Array<{ longitude: number; latitude: number; member: string }>, options?: { nx?: boolean; xx?: boolean; ch?: boolean }): Promise<number>;
-
-  /**
-   * GEOHASH: Return geohash strings for the given members.
-   * Returns array of strings (null for non-existent members).
-   */
   geohash(key: string, members: string[]): Promise<(string | null)[]>;
-
-  /**
-   * GEOPOS: Return [longitude, latitude] pairs for the given members.
-   * Returns array of [lon, lat] or null for non-existent members.
-   */
   geopos(key: string, members: string[]): Promise<(Array<number> | null)[]>;
-
-  /**
-   * GEODIST: Return distance between two members in the given unit.
-   * Returns null if either member doesn't exist; distance as number.
-   */
   geodist(key: string, member1: string, member2: string, unit?: 'm' | 'km' | 'ft' | 'mi'): Promise<number | null>;
-
-  /**
-   * GEORADIUS: Search by radius from a longitude/latitude point.
-   * Returns array of GeoSearchResult.
-   */
   georadius(key: string, longitude: number, latitude: number, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]>;
-
-  /**
-   * GEORADIUSBYMEMBER: Search by radius from an existing member.
-   * Returns array of GeoSearchResult.
-   */
   georadiusbymember(key: string, member: string, radius: number, unit: 'm' | 'km' | 'ft' | 'mi', options?: { withCoord?: boolean; withDist?: boolean; withHash?: boolean; count?: number; sort?: 'ASC' | 'DESC'; store?: string; storeDist?: string }): Promise<GeoSearchResult[]>;
-
-  /**
-   * GEOSEARCH: Search within area (by radius or by box) from a member or coordinates.
-   * Returns array of GeoSearchResult.
-   */
   geosearch(key: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; withCoord?: boolean; withDist?: boolean; withHash?: boolean }): Promise<GeoSearchResult[]>;
-
-  /**
-   * GEOSEARCHSTORE: Like GEOSEARCH but stores results in a destination key.
-   * Returns the number of results stored.
-   */
   geosearchstore(destination: string, source: string, options: { fromMember?: string; fromLongitude?: number; fromLatitude?: number; byRadius?: { radius: number; unit: 'm' | 'km' | 'ft' | 'mi' }; byBox?: { width: number; height: number; unit: 'm' | 'km' | 'ft' | 'mi' }; sort?: 'ASC' | 'DESC'; count?: number; any?: boolean; storeDist?: boolean }): Promise<number>;
+}
 
-  // === Stream operations ===
-
-  /** XADD: Add an entry to a stream. Returns the generated or validated ID. */
+export interface IStreamStorage {
   xadd(key: string, id: string, fields: Record<string, string>, options?: { maxlen?: number; approx?: boolean; minid?: string; nomkstream?: boolean }): Promise<string | null>;
-
-  /** XTRIM: Trim the stream. Returns the number of entries removed. */
   xtrim(key: string, strategy: 'MAXLEN' | 'MINID', threshold: string | number, approx?: boolean, limit?: number): Promise<number>;
-
-  /** XDEL: Delete entries. Returns the number of entries actually deleted. */
   xdel(key: string, ids: string[]): Promise<number>;
-
-  /** XRANGE: Get entries in the given ID range. */
   xrange(key: string, start: string, end: string, count?: number): Promise<StreamEntry[]>;
-
-  /** XREVRANGE: Get entries in reverse ID range. */
   xrevrange(key: string, end: string, start: string, count?: number): Promise<StreamEntry[]>;
-
-  /** XLEN: Return the number of entries in the stream. */
   xlen(key: string): Promise<number>;
-
-  /** XREAD: Read from one or more streams starting at the given IDs. */
   xread(keys: string[], ids: string[], count?: number): Promise<Array<{ key: string; entries: StreamEntry[] }> | null>;
-
-  /** XGROUP CREATE: Create a consumer group. */
   xgroupCreate(key: string, group: string, id: string, mkstream?: boolean): Promise<string>;
-
-  /** XGROUP DESTROY: Destroy a consumer group. Returns count of destroyed groups (0 or 1). */
   xgroupDestroy(key: string, group: string): Promise<number>;
-
-  /** XGROUP CREATECONSUMER: Create a consumer in a group. Returns 1 if created, 0 if already exists. */
   xgroupCreateconsumer(key: string, group: string, consumer: string): Promise<number>;
-
-  /** XGROUP DELCONSUMER: Delete a consumer. Returns number of pending entries that were re-assigned. */
   xgroupDelconsumer(key: string, group: string, consumer: string): Promise<number>;
-
-  /** XGROUP SETID: Set the last delivered ID for a group. */
   xgroupSetid(key: string, group: string, id: string): Promise<string>;
-
-  /** XREADGROUP: Read from a stream as a consumer group member. */
   xreadgroup(group: string, consumer: string, keys: string[], ids: string[], count?: number, noack?: boolean): Promise<Array<{ key: string; entries: StreamEntry[] }> | null>;
-
-  /** XACK: Acknowledge messages. Returns number of entries acknowledged. */
   xack(key: string, group: string, ids: string[]): Promise<number>;
-
-  /** XPENDING: Get pending entries summary or detailed list. */
   xpending(key: string, group: string, options?: { start?: string; end?: string; count?: number; consumer?: string; idle?: number }): Promise<PendingEntry[] | { count: number; minId: string | null; maxId: string | null; consumers: Array<{ name: string; pending: number }> }>;
-
-  /** XCLAIM: Claim pending entries. Returns claimed entries. */
   xclaim(key: string, group: string, consumer: string, minIdleTime: number, ids: string[], options?: { idle?: number; time?: number; retrycount?: number; force?: boolean; justid?: boolean }): Promise<StreamEntry[] | string[]>;
-
-  /** XAUTOCLAIM: Auto-claim pending entries. Returns nextStartId and entries. */
   xautoclaim(key: string, group: string, consumer: string, minIdleTime: number, start: string, options?: { count?: number; justid?: boolean }): Promise<{ nextStartId: string; entries: StreamEntry[] | string[] }>;
-
-  /** XINFO STREAM: Get stream information. */
   xinfoStream(key: string): Promise<StreamInfo>;
-
-  /** XINFO GROUPS: Get consumer group information for a stream. */
   xinfoGroups(key: string): Promise<GroupInfo[]>;
-
-  /** XINFO CONSUMERS: Get consumer information for a group. */
   xinfoConsumers(key: string, group: string): Promise<StreamConsumer[]>;
-
-  /** XSETID: Set the last-generated ID for a stream. */
   xsetid(key: string, id: string): Promise<string>;
+}
 
-  // === SORT ===
-
-  /**
-   * SORT: Sort the elements in a LIST, SET, or ZSET key.
-   * Returns sorted elements (string[]) or, if STORE is specified, the count of stored elements (number).
-   */
+export interface ISortStorage {
   sort(key: string, options?: {
     byPattern?: string;
     limit?: { offset: number; count: number };
@@ -383,31 +292,23 @@ export interface IStorage {
     alpha?: boolean;
     store?: string;
   }): Promise<string[] | number>;
+}
 
-  // === Conditional Delete ===
-
-  /** Conditional delete: delete key only if all conditions are met. Returns 1 if deleted, 0 if not. */
+export interface ICustomStorage {
   delex(key: string, conditions: Array<{ operator: string; value: string }>): Promise<number>;
-
-  // === Multi-Set with Expiry ===
-
-  /** Set multiple keys with expiry. Returns count of keys set. */
   msetex(pairs: Array<{ key: string; seconds: number; value: string }>): Promise<number>;
+}
 
-  // === Server / Persistence ===
-
-  /** Force a save/flush of data to persistent storage. No-op for InMemoryStorage. */
+export interface IServerStorage {
   save(): Promise<void>;
-
-  /** Background save. Returns 'OK'. */
   bgsave(): Promise<string>;
-
-  /** Return server info as a plain-text string (key:value lines). Section is optional (return all info if omitted). */
   info(section?: string): Promise<string>;
-
-  /** Return the last save time as a Unix timestamp (seconds). 0 if never saved. */
   getLastSaveTime(): Promise<number>;
 }
+
+// === Composed interface ===
+
+export interface IStorage extends IKeyStorage, IHashStorage, IListStorage, ISetStorage, IZSetStorage, IBitmapStorage, IHllStorage, IJsonStorage, IGeoStorage, IStreamStorage, ISortStorage, ICustomStorage, IServerStorage {}
 
 export interface StorageConfig {
   path: string;
