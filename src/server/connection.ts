@@ -6,22 +6,40 @@ import { RespParser } from '../protocol/parser';
 import { createLogger } from '../logger';
 
 const logger = createLogger('connection');
-const activeSockets = new Set<net.Socket>();
-let connectionCounter = 0;
 
-export function getActiveConnectionCount(): number {
-  return activeSockets.size;
+export class ConnectionManager {
+  private activeSockets = new Set<net.Socket>();
+  private connectionCounter = 0;
+
+  get activeConnectionCount(): number {
+    return this.activeSockets.size;
+  }
+
+  addSocket(socket: net.Socket): number {
+    this.activeSockets.add(socket);
+    return ++this.connectionCounter;
+  }
+
+  removeSocket(socket: net.Socket): void {
+    this.activeSockets.delete(socket);
+  }
 }
 
-export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager): (socket: net.Socket) => void {
+const defaultManager = new ConnectionManager();
+
+export function getActiveConnectionCount(): number {
+  return defaultManager.activeConnectionCount;
+}
+
+export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager, manager: ConnectionManager = defaultManager): (socket: net.Socket) => void {
   return function handleConnection(socket: net.Socket): void {
-    activeSockets.add(socket);
+    manager.addSocket(socket);
     const remoteAddress = socket.remoteAddress ?? 'unknown';
     const remotePort = socket.remotePort ?? 0;
     const clientId = `${remoteAddress}:${remotePort}`;
-    const connId = `conn-${++connectionCounter}`;
+    const connId = `conn-${manager.activeConnectionCount}`;
 
-    logger.info('Client connected', { clientId, activeConnections: activeSockets.size });
+    logger.info('Client connected', { clientId, activeConnections: manager.activeConnectionCount });
 
     const send = (msg: string) => { socket.write(msg); };
     const handler = new CommandHandler(storage, pubsub, connId, send);
@@ -47,8 +65,8 @@ export function createConnectionHandler(storage: IStorage, pubsub: PubSubManager
 
     socket.on('close', () => {
       handler.destroy();
-      activeSockets.delete(socket);
-      logger.info('Client disconnected', { clientId, activeConnections: activeSockets.size });
+      manager.removeSocket(socket);
+      logger.info('Client disconnected', { clientId, activeConnections: manager.activeConnectionCount });
     });
 
     socket.on('error', (err: Error) => {

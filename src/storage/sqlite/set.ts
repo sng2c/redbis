@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { assertType, assertTypeOneOf, WRONGTYPE_ERROR } from '../type-check';
-import { globToRegex } from './types';
+import { globToRegex } from '../../utils/glob';
 import type { SqliteStorage } from './core';
 
 export const setMethods = {

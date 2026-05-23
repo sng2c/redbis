@@ -33,7 +33,9 @@ Object.assign(InMemoryStorage.prototype,
   serverMethods,
 );
 
-// TypeScript declaration merging: InMemoryStorage implements IStorage
+// TypeScript declaration merging: InMemoryStorage implements IStorage.
+// This provides compile-time safety — if any IStorage method is missing from
+// the core class or mixins, callers will get a type error when using it through IStorage.
 declare module './core' {
   interface InMemoryStorage extends IStorage {}
 }

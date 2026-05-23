@@ -1,74 +1,7 @@
+import { globToRegex } from '../utils/glob';
 import { encodeInteger, encodeBulkString } from '../protocol/resp.js';
 
 // PubSubManager — Centralized pub/sub state shared across all connections.
-
-/**
- * Glob matching implementing Redis KEYS semantics:
- * - `*` matches any sequence of characters (including empty)
- * - `?` matches exactly one character
- * - `[abc]` matches one character in the set
- * - `[a-z]` matches one character in the range
- */
-function globMatch(pattern: string, str: string): boolean {
-  let pi = 0;
-  let si = 0;
-  const pLen = pattern.length;
-  const sLen = str.length;
-
-  while (pi < pLen && si < sLen) {
-    const pc = pattern[pi];
-    if (pc === '*') {
-      // Try matching 0 or more characters
-      pi++;
-      if (pi === pLen) return true; // trailing * matches everything
-      // Try all possible positions for the remainder of the pattern
-      for (let k = si; k <= sLen; k++) {
-        if (globMatch(pattern.slice(pi), str.slice(k))) return true;
-      }
-      return false;
-    } else if (pc === '?') {
-      pi++;
-      si++;
-    } else if (pc === '[') {
-      pi++;
-      if (pi >= pLen) return false; // unterminated bracket
-      const negate = pattern[pi] === '^';
-      if (negate) pi++;
-      let matched = false;
-      if (pi < pLen && pattern[pi] === ']') {
-        // ']' as first char in set is literal
-        if (str[si] === ']') matched = true;
-        pi++;
-      }
-      while (pi < pLen && pattern[pi] !== ']') {
-        if (pi + 2 < pLen && pattern[pi + 1] === '-') {
-          // Range: [a-z]
-          const rangeStart = pattern[pi];
-          const rangeEnd = pattern[pi + 2];
-          if (str[si] >= rangeStart && str[si] <= rangeEnd) {
-            matched = true;
-          }
-          pi += 3;
-        } else {
-          if (str[si] === pattern[pi]) matched = true;
-          pi++;
-        }
-      }
-      if (pi < pLen && pattern[pi] === ']') pi++; // skip closing bracket
-      if (negate) matched = !matched;
-      if (!matched) return false;
-      si++;
-    } else {
-      if (pc !== str[si]) return false;
-      pi++;
-      si++;
-    }
-  }
-
-  // Remaining pattern chars must all be '*' to match
-  while (pi < pLen && pattern[pi] === '*') pi++;
-  return pi === pLen && si === sLen;
-}
 
 export class PubSubManager {
   // connId → set of channel names
@@ -272,7 +205,7 @@ export class PubSubManager {
 
     // Pattern subscribers whose pattern matches the channel
     for (const [pattern, conns] of this.patternToConns) {
-      if (globMatch(pattern, channel)) {
+      if (globToRegex(pattern).test(channel)) {
         for (const [connId, sendFn] of conns) {
           const msg =
             '*4\r\n' +
@@ -293,7 +226,7 @@ export class PubSubManager {
   getChannels(pattern?: string): string[] {
     const channels = Array.from(this.channelToConns.keys());
     if (!pattern) return channels.sort();
-    return channels.filter(ch => globMatch(pattern, ch)).sort();
+    return channels.filter(ch => globToRegex(pattern).test(ch)).sort();
   }
 
   /** Get subscriber counts per channel. Returns array of [channel, count] pairs. */

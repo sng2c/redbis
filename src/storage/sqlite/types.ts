@@ -32,21 +32,3 @@ export function formatMemoryHuman(bytes: number): string {
   const gb = bytes / (1024 * 1024 * 1024);
   return gb.toFixed(2) + 'G';
 }
-
-export function globToRegex(pattern: string): RegExp {
-  let regexStr = '^';
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '*') {
-      regexStr += '.*';
-    } else if (ch === '?') {
-      regexStr += '.';
-    } else if ('.+^${}()|[]\\'.includes(ch)) {
-      regexStr += '\\' + ch;
-    } else {
-      regexStr += ch;
-    }
-  }
-  regexStr += '$';
-  return new RegExp(regexStr);
-}

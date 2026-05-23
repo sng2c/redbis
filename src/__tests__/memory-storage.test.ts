@@ -161,11 +161,21 @@ describe('InMemoryStorage', () => {
       expect(result).toEqual(['prefix.abc']);
     });
 
-    it('대괄호가 포함된 키를 패턴으로 정확히 매칭한다', async () => {
+    it('대괄표 패턴이 문자 클래스로 동작한다', async () => {
+      await storage.set('testi', 'val1');
+      await storage.set('testt', 'val2');
+      await storage.set('test[item]', 'val3');
+
+      // Redis KEYS semantics: test[item] is a character class matching 'i'
+      const result = await storage.keys('test[item]');
+      expect(result.sort()).toEqual(['testi', 'testt']);
+    });
+
+    it('이스케이프된 대괄호로 리터럴 매칭한다', async () => {
       await storage.set('test[item]', 'val1');
       await storage.set('testitem', 'val2');
 
-      const result = await storage.keys('test[item]');
+      const result = await storage.keys('test\\[item\\]');
       expect(result).toEqual(['test[item]']);
     });
   });

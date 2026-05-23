@@ -1,3 +1,4 @@
+import { globToRegex } from '../../utils/glob';
 // InMemoryStorage core — data structures, shared helpers, and core key-value methods.
 // Data-type methods are added via mixins (see index.ts).
 
@@ -49,23 +50,6 @@ evictAllExpired(): void {
     }
   }
 
-globToRegex(pattern: string): RegExp {
-    let regexStr = '^';
-    for (let i = 0; i < pattern.length; i++) {
-      const ch = pattern[i];
-      if (ch === '*') {
-        regexStr += '.*';
-      } else if (ch === '?') {
-        regexStr += '.';
-      } else if ('.+^${}()|[]\\'.includes(ch)) {
-        regexStr += '\\' + ch;
-      } else {
-        regexStr += ch;
-      }
-    }
-    regexStr += '$';
-    return new RegExp(regexStr);
-  }
 
 async get(key: string): Promise<string | null> {
     this.evictIfExpired(key);
@@ -92,7 +76,7 @@ async delete(key: string): Promise<boolean> {
 
 async keys(pattern: string): Promise<string[]> {
     this.evictAllExpired();
-    const regex = this.globToRegex(pattern);
+    const regex = globToRegex(pattern);
     const result: string[] = [];
     for (const key of this.store.keys()) {
       if (regex.test(key)) {
@@ -578,7 +562,7 @@ async scan(cursor: number, pattern?: string, count?: number): Promise<{ cursor: 
 
     const allKeys = Array.from(this.store.keys()).sort();
     const effectiveCount = count ?? 10;
-    const regex = pattern ? this.globToRegex(pattern) : null;
+    const regex = pattern ? globToRegex(pattern) : null;
 
     const matchedKeys: string[] = [];
     let idx = cursor;

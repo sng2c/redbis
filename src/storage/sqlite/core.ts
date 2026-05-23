@@ -5,7 +5,8 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
 import type { StorageConfig } from '../interface';
-import { formatMemoryHuman, globToRegex } from './types';
+import { formatMemoryHuman } from './types';
+import { globToRegex } from '../../utils/glob';
 
 export class SqliteStorage {
   db!: Database.Database;
