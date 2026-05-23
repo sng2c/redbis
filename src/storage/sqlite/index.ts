@@ -16,6 +16,7 @@ import { geoMethods } from './geo';
 import { sortMethods } from './sort';
 import { customMethods } from './custom';
 import { serverMethods } from './server';
+import { expireMethods } from './expire';
 
 // Apply all mixin methods to the prototype
 Object.assign(
@@ -31,7 +32,8 @@ Object.assign(
   geoMethods,
   sortMethods,
   customMethods,
-  serverMethods
+  serverMethods,
+  expireMethods
 );
 
 // TypeScript declaration merging: SqliteStorage implements IStorage.
