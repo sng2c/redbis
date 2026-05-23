@@ -32,8 +32,9 @@ export function globToRegex(pattern: string): RegExp {
         i++;
       }
       // Handle ']' as first char inside bracket (literal)
+      // Must escape ] with \] inside a JS RegExp character class
       if (i < len && pattern[i] === ']') {
-        regexStr += ']';
+        regexStr += '\\]';
         i++;
       }
       while (i < len && pattern[i] !== ']') {
